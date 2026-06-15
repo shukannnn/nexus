@@ -93,6 +93,8 @@ func (app *App) ScheduleRetry(jobID string, attempts int) {
 	jitter := time.Duration(rand.Intn(attempts*5)) * time.Second
 	totalDelay := delay + jitter
 
+	slog.Info("retrying job", "job_id", jobID, "attempt", attempts, "delay", totalDelay)
+
 	time.Sleep(totalDelay)
 	if errRedis := queue.Enqueue(app.redisClient, jobID); errRedis != nil {
 		slog.Error("failed to re-enqueue job for retry", "job_id", jobID, "error", errRedis)
@@ -109,6 +111,9 @@ func (app *App) ProcessNextJob() (string, error) {
 		return "", fmt.Errorf("error while getting jobid from redis: %w", err)
 	}
 
+	slog.Info("job dequeued", "job_id", jobID)
+
+
 	if jobID == "" {
 		return "", nil
 	}
@@ -119,6 +124,7 @@ func (app *App) ProcessNextJob() (string, error) {
 	}
 
 	if job.Attempts >= job.MaxAttempts {
+		slog.Warn("job exceeded max attempts", "job_id", jobID, "attempts", job.Attempts)
 		if err := store.MarkRetryingOrFailedWithError(app.dbClient, jobID, job.Attempts+1, jobs.StatusFailed, "max attempts exceeded"); err != nil {
 			return "", fmt.Errorf("error while updating status to failure for max attempts: %w", err)
 		}
@@ -144,12 +150,16 @@ func (app *App) ProcessNextJob() (string, error) {
 			return "", fmt.Errorf("error while updating the job status to retrying: %w", err)
 		}
 		go app.ScheduleRetry(jobID, job.Attempts+1)
+		slog.Info("job scheduled for retry", "job_id", jobID, "attempt", job.Attempts+1)
 		return jobID, nil
 	}
 
 	if err := store.UpdateJobStatus(app.dbClient, jobID, jobs.StatusCompleted); err != nil {
 		return "", fmt.Errorf("error while updating the status of the job to completed: %w", err)
 	}
+
+	slog.Info("job completed", "job_id", jobID)
+
 
 	return jobID, nil
 }

@@ -10,6 +10,7 @@ import (
 	"log/slog"
 	"net/http"
 	"nexus/internal/jobs"
+	"time"
 )
 
 type WebHookWorker struct {
@@ -49,7 +50,8 @@ func (_ WebHookWorker) Process(job *jobs.Job) error {
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("X-Nexus-Signature", signature)
 
-	resp, err := http.DefaultClient.Do(req)
+	client := &http.Client{Timeout: 10 * time.Second}
+	resp, err := client.Do(req)
 	if err != nil {
 		return fmt.Errorf("webhook delivery failed with error: %w", err)
 	}

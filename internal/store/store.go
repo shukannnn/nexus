@@ -88,7 +88,11 @@ func MarkProcessingAndIncrementAttempts(db *sql.DB, id string) error {
 
 func MarkRetryingOrFailedWithError(db *sql.DB, id string, attempt int, status string, last_error string) error {
 
-	slog.Error("job failed", "job_id", id, "error", last_error)
+	if status == jobs.StatusFailed {
+		slog.Error("job failed", "job_id", id, "error", last_error)
+	} else {
+		slog.Warn("job retrying", "job_id", id, "error", last_error)
+	}
 
 	//using transaction to update the status and error table
 	tx, err := db.Begin()
@@ -103,7 +107,7 @@ func MarkRetryingOrFailedWithError(db *sql.DB, id string, attempt int, status st
 	}
 
 	query = `INSERT INTO job_errors (job_id, attempt, error) VALUES ($1, $2, $3)`
-	if _, err := tx.Exec(`INSERT INTO job_errors (job_id, attempt, error) VALUES ($1, $2, $3)`, id, attempt, last_error); err != nil {
+	if _, err := tx.Exec(query, id, attempt, last_error); err != nil {
 		return fmt.Errorf("error inserting job error: %w", err)
 	}
 
