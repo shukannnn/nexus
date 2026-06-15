@@ -111,12 +111,11 @@ func (app *App) ProcessNextJob() (string, error) {
 		return "", fmt.Errorf("error while getting jobid from redis: %w", err)
 	}
 
-	slog.Info("job dequeued", "job_id", jobID)
-
-
 	if jobID == "" {
 		return "", nil
 	}
+
+	slog.Info("job dequeued", "job_id", jobID)
 
 	job, err := app.GetJobByID(jobID)
 	if err != nil {
