@@ -106,7 +106,7 @@ func (app *App) ScheduleRetry(jobID string, attempts int) {
 
 func (app *App) ProcessNextJob() (string, error) {
 
-	jobID, err := queue.Dequeue(app.redisClient)
+	jobID, err := queue.GetJobIDFromRedis(app.redisClient)
 	if err != nil {
 		return "", fmt.Errorf("error while getting jobid from redis: %w", err)
 	}
@@ -127,6 +127,8 @@ func (app *App) ProcessNextJob() (string, error) {
 		if err := store.MarkRetryingOrFailedWithError(app.dbClient, jobID, job.Attempts+1, jobs.StatusFailed, "max attempts exceeded"); err != nil {
 			return "", fmt.Errorf("error while updating status to failure for max attempts: %w", err)
 		}
+		// remove it from processing set when failure
+		queue.RemoveFromProcessing(app.redisClient, jobID)
 		return jobID, nil
 	}
 
@@ -140,6 +142,8 @@ func (app *App) ProcessNextJob() (string, error) {
 		if err := store.MarkRetryingOrFailedWithError(app.dbClient, jobID, job.Attempts+1, jobs.StatusFailed, err.Error()); err != nil {
 			return "", fmt.Errorf("error while updating the job status to retrying: %w", err)
 		}
+		// remove it from processing set when failure
+		queue.RemoveFromProcessing(app.redisClient, jobID)
 		return jobID, nil
 	}
 
@@ -158,6 +162,8 @@ func (app *App) ProcessNextJob() (string, error) {
 		return "", fmt.Errorf("error while updating the status of the job to completed: %w", err)
 	}
 
+	//remove from processing from success
+	queue.RemoveFromProcessing(app.redisClient, jobID)
 	slog.Info("job completed", "job_id", jobID)
 
 
