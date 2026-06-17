@@ -148,6 +148,7 @@ func (app *App) ProcessNextJob() (string, error) {
 		if err := store.MarkRetryingOrFailedWithError(app.dbClient, jobID, job.Attempts+1, jobs.StatusRetrying, err.Error()); err != nil {
 			return "", fmt.Errorf("error while updating the job status to retrying: %w", err)
 		}
+		slog.Error("error while processin job", "job_id", jobID, "attempt", job.Attempts + 1, "error", err.Error())
 		go app.ScheduleRetry(jobID, job.Attempts+1)
 		slog.Info("job scheduled for retry", "job_id", jobID, "attempt", job.Attempts+1)
 		return jobID, nil
