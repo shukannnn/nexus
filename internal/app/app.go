@@ -22,6 +22,8 @@ type App struct {
 	redisClient *redis.Client
 	dbClient    *sql.DB
 	gracePeriod int
+	reapInterval int
+	visibilityTimeout int
 }
 
 func NewApp(cfg *config.Config) (*App, error) {
@@ -44,6 +46,8 @@ func NewApp(cfg *config.Config) (*App, error) {
 		redisClient: redisClient,
 		dbClient:    dbClient,
 		gracePeriod: cfg.GracePeriod,
+		visibilityTimeout: cfg.VisibilityTimeout,
+		reapInterval: cfg.ReapInterval,
 	}, nil
 
 }

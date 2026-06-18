@@ -12,6 +12,8 @@ type Config struct {
 	DatabaseURL string
 	PoolSize    int
 	GracePeriod int
+	VisibilityTimeout int
+	ReapInterval int
 }
 
 func Load() (*Config, error) {
@@ -36,17 +38,31 @@ func Load() (*Config, error) {
 		return nil, fmt.Errorf("invalid pool size: %w", err)
 	}
 
-	gracePerion, err := strconv.Atoi(os.Getenv("GRACE_PERIOND"))
+	gracePeriod, err := strconv.Atoi(os.Getenv("GRACE_PERIOD"))
 	if err != nil {
 		return nil, fmt.Errorf("invalid grace period: %w", err)
 	}
+
+	reapInterval, err := strconv.Atoi(os.Getenv("REAP_INTERVAL"))
+	if err != nil {
+		return nil, fmt.Errorf("invalid reap interval: %w", err)
+	}
+
+
+	visibilityTimeout, err := strconv.Atoi(os.Getenv("VISIBILITY_TIMEOUT"))
+	if err != nil {
+		return nil, fmt.Errorf("invalid visibility timeout: %w", err)
+	}
+
 
 	c := Config{
 		Port:        port,
 		RedisAddr:   redisAddr,
 		DatabaseURL: databaseURL,
 		PoolSize:    size,
-		GracePeriod: gracePerion,
+		GracePeriod: gracePeriod,
+		VisibilityTimeout: visibilityTimeout,
+		ReapInterval: reapInterval,
 	}
 
 	return &c, nil
