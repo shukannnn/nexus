@@ -21,6 +21,7 @@ import (
 type App struct {
 	redisClient *redis.Client
 	dbClient    *sql.DB
+	gracePeriod int
 }
 
 func NewApp(cfg *config.Config) (*App, error) {
@@ -42,6 +43,7 @@ func NewApp(cfg *config.Config) (*App, error) {
 	return &App{
 		redisClient: redisClient,
 		dbClient:    dbClient,
+		gracePeriod: cfg.GracePeriod,
 	}, nil
 
 }
@@ -87,21 +89,35 @@ func (app *App) getWorkerForType(jobType string) (worker.Worker, error) {
 	return appWorker, nil
 }
 
-func (app *App) ScheduleRetry(jobID string, attempts int) {
+func (app *App) ScheduleRetry(job *jobs.Job, cause error) {
+	//attempts will be the job.Attempts + 1
+	attempts := job.Attempts + 1
+
+	//calculating delay
 	base := 2 * time.Second
 	delay := base * time.Duration(math.Pow(2, float64(attempts)))
 	jitter := time.Duration(rand.Intn(attempts*5)) * time.Second
 	totalDelay := delay + jitter
 
-	slog.Info("retrying job", "job_id", jobID, "attempt", attempts, "delay", totalDelay)
+	//re-stamp the jobID value in processing set to expiry time so that reaper can know whether it is being retried or not
+	//expiry time = current_time + totalDelay + gracePeriod
+	expiryTime := time.Now().Add(totalDelay + time.Duration(app.gracePeriod) * time.Second).Unix()
+	queue.UpdateValueInProcessingQueue(app.redisClient, job.ID, expiryTime)
 
-	time.Sleep(totalDelay)
-	if errRedis := queue.Enqueue(app.redisClient, jobID); errRedis != nil {
-		slog.Error("failed to re-enqueue job for retry", "job_id", jobID, "error", errRedis)
-		if err := store.MarkRetryingOrFailedWithError(app.dbClient, jobID, attempts, jobs.StatusFailed, errRedis.Error()); err != nil {
-			slog.Error("failed to mark job as failed after retry enqueue error", "job_id", jobID, "error", err)
-		}
+	//now we will mark this as retrying
+	//we did not mark it before because reaper can get retrying status but it might have the old timestamp in processing set
+	if err := store.MarkRetryingOrFailedWithError(app.dbClient, job.ID, job.Attempts+1, jobs.StatusRetrying, cause.Error()); err != nil {
+		slog.Error("error while updating the job status to retrying", "error", err, "jobID", job.ID)
 	}
+
+	slog.Info("retrying job", "jobID", job.ID, "attempt", attempts, "delay", totalDelay)
+
+	//sleeping it for the delay
+	time.Sleep(totalDelay)
+	
+	//moving the job from processing queue to job queue, so that the jobworker can pick it up
+	//no error handling because if it fails, reaper will pick it up anyways
+	queue.RemoveFromProcessingAndInsertIntoJob(app.redisClient, job.ID)
 }
 
 func (app *App) ProcessNextJob() (string, error) {
@@ -149,11 +165,8 @@ func (app *App) ProcessNextJob() (string, error) {
 
 	err = appWorker.Process(job)
 	if err != nil {
-		if err := store.MarkRetryingOrFailedWithError(app.dbClient, jobID, job.Attempts+1, jobs.StatusRetrying, err.Error()); err != nil {
-			return "", fmt.Errorf("error while updating the job status to retrying: %w", err)
-		}
-		slog.Error("error while processin job", "job_id", jobID, "attempt", job.Attempts + 1, "error", err.Error())
-		go app.ScheduleRetry(jobID, job.Attempts+1)
+		slog.Error("error while processing job", "job_id", jobID, "attempt", job.Attempts + 1, "error", err.Error())
+		go app.ScheduleRetry(job, err)
 		slog.Info("job scheduled for retry", "job_id", jobID, "attempt", job.Attempts+1)
 		return jobID, nil
 	}

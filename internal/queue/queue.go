@@ -70,3 +70,26 @@ func RemoveFromProcessing(client *redis.Client, jobID string) {
 		slog.Error("error while removing from processing queue", "error", err, "jobID", jobID)
 	}
 }
+
+
+func UpdateValueInProcessingQueue(client *redis.Client, jobID string, expiryTime int64){
+	if err := client.ZAdd(context.Background(), PROCESSING_QUEUE, redis.Z{
+		Score: float64(expiryTime),
+		Member: jobID,
+	}).Err(); err != nil {
+		slog.Error("error while upating value in processing queue", "error", err, "jobID", jobID)
+	}
+}
+
+
+func RemoveFromProcessingAndInsertIntoJob(client *redis.Client, jobID string) {
+	luaScript := `
+	local removed = redis.call('ZREM', KEYS[2], ARGV[1])
+	if removed == 1 then
+		redis.call('RPUSH', KEYS[1], ARGV[1])
+	end`
+
+	if err := client.Eval(context.Background(), luaScript, []string{QUEUE_NAME, PROCESSING_QUEUE}, jobID).Err(); err != nil {
+		slog.Error("error while removing from processing queue and inserting into job queue", "error", err, "jobID", jobID)
+	}
+}
