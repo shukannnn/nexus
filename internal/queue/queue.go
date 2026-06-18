@@ -45,14 +45,14 @@ func GetJobIDFromRedis(client *redis.Client) (string, error) {
 						redis.call('ZADD', KEYS[2], ARGV[1], jobID)
 					end
 					return jobID`
-	
+
 	result, err := client.Eval(context.Background(), luaScript, []string{QUEUE_NAME, PROCESSING_QUEUE}, time.Now().Unix()).Result()
-	
+
 	if err != nil {
 		if err == redis.Nil {
 			return "", nil
 		}
-		return "", fmt.Errorf("error while dequeue : %w", err)
+		return "", fmt.Errorf("error while getJobidfromredis : %w", err)
 	}
 
 	jobID, ok := result.(string)
@@ -64,23 +64,20 @@ func GetJobIDFromRedis(client *redis.Client) (string, error) {
 
 }
 
-
 func RemoveFromProcessing(client *redis.Client, jobID string) {
 	if err := client.ZRem(context.Background(), PROCESSING_QUEUE, jobID).Err(); err != nil {
 		slog.Error("error while removing from processing queue", "error", err, "jobID", jobID)
 	}
 }
 
-
-func UpdateValueInProcessingQueue(client *redis.Client, jobID string, expiryTime int64){
+func UpdateValueInProcessingQueue(client *redis.Client, jobID string, expiryTime int64) {
 	if err := client.ZAdd(context.Background(), PROCESSING_QUEUE, redis.Z{
-		Score: float64(expiryTime),
+		Score:  float64(expiryTime),
 		Member: jobID,
 	}).Err(); err != nil {
 		slog.Error("error while upating value in processing queue", "error", err, "jobID", jobID)
 	}
 }
-
 
 func RemoveFromProcessingAndInsertIntoJob(client *redis.Client, jobID string) {
 	luaScript := `
@@ -92,4 +89,20 @@ func RemoveFromProcessingAndInsertIntoJob(client *redis.Client, jobID string) {
 	if err := client.Eval(context.Background(), luaScript, []string{QUEUE_NAME, PROCESSING_QUEUE}, jobID).Err(); err != nil {
 		slog.Error("error while removing from processing queue and inserting into job queue", "error", err, "jobID", jobID)
 	}
+}
+
+func GetStaleJobs(client *redis.Client) ([]redis.Z, error){
+	time := time.Now().Unix()
+	result, err := client.ZRangeArgsWithScores(context.Background(), redis.ZRangeArgs{
+		Key: PROCESSING_QUEUE,
+		ByScore: true,
+		Start: "-inf",
+		Stop: time,
+	}).Result()
+
+	if err != nil {
+		return nil, fmt.Errorf("error while quering stale jobs: %w", err)
+	}
+
+	return result, nil
 }

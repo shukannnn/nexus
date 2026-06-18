@@ -63,6 +63,10 @@ func main() {
 	pool := worker.NewPool(cfg.PoolSize, application.ProcessNextJob)
 	pool.Start(workerCtx)
 
+	//starting the reaper
+	reaperCtx, stopReaper := context.WithCancel(context.Background())
+	go application.StartReaper(reaperCtx)
+
 	//goroutine to make the server start in background
 	go func() {
 		slog.Info("server starting", "port", cfg.Port)
@@ -80,6 +84,9 @@ func main() {
 
 	//cancelling worker context so that workers stop
 	stopWorkers()
+
+	//cancelling reaper context so that it stops working
+	stopReaper()
 
 	ctxTimeout, cancelTimeout := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancelTimeout()

@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"nexus/internal/jobs"
 
+	"github.com/lib/pq"
 	_ "github.com/lib/pq"
 )
 
@@ -59,6 +60,43 @@ func GetJobByID(db *sql.DB, id string) (*jobs.Job, error) {
 	}
 
 	return &record, nil
+}
+
+func GetJobByIDs(db *sql.DB, ids []string) ([]*jobs.Job, error) {
+	query := `
+	SELECT id, type, payload, status, attempts, max_attempts, last_error from 
+	jobs where id = ANY($1)`
+
+	rows, err := db.Query(query, pq.Array(ids))
+	if err != nil {
+		return nil, fmt.Errorf("error while fetching job by ids: %w", err)
+	}
+	defer rows.Close()
+
+	var jobRows []*jobs.Job
+
+	for rows.Next() {
+		var record jobs.Job
+		var last_error sql.NullString
+		err := rows.Scan(&record.ID, &record.Type, &record.Payload, &record.Status, &record.Attempts, &record.MaxAttempts, &last_error)
+		if err != nil {
+			return nil, fmt.Errorf("error while fetching job by id in fetchjobsbyids: %w", err)
+		}
+		
+		if last_error.Valid {
+			record.LastError = last_error.String
+		} else {
+			record.LastError = ""
+		}
+		jobRows = append(jobRows, &record)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("error while iterating rows: %w", err)
+	}
+
+	return jobRows, nil
+
 }
 
 func UpdateJobStatus(db *sql.DB, id string, status string) error {

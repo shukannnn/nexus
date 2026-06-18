@@ -19,10 +19,10 @@ import (
 )
 
 type App struct {
-	redisClient *redis.Client
-	dbClient    *sql.DB
-	gracePeriod int
-	reapInterval int
+	redisClient       *redis.Client
+	dbClient          *sql.DB
+	gracePeriod       int
+	reapInterval      int
 	visibilityTimeout int
 }
 
@@ -43,11 +43,11 @@ func NewApp(cfg *config.Config) (*App, error) {
 	}
 
 	return &App{
-		redisClient: redisClient,
-		dbClient:    dbClient,
-		gracePeriod: cfg.GracePeriod,
+		redisClient:       redisClient,
+		dbClient:          dbClient,
+		gracePeriod:       cfg.GracePeriod,
 		visibilityTimeout: cfg.VisibilityTimeout,
-		reapInterval: cfg.ReapInterval,
+		reapInterval:      cfg.ReapInterval,
 	}, nil
 
 }
@@ -105,7 +105,7 @@ func (app *App) ScheduleRetry(job *jobs.Job, cause error) {
 
 	//re-stamp the jobID value in processing set to expiry time so that reaper can know whether it is being retried or not
 	//expiry time = current_time + totalDelay + gracePeriod
-	expiryTime := time.Now().Add(totalDelay + time.Duration(app.gracePeriod) * time.Second).Unix()
+	expiryTime := time.Now().Add(totalDelay + time.Duration(app.gracePeriod)*time.Second).Unix()
 	queue.UpdateValueInProcessingQueue(app.redisClient, job.ID, expiryTime)
 
 	//now we will mark this as retrying
@@ -118,7 +118,7 @@ func (app *App) ScheduleRetry(job *jobs.Job, cause error) {
 
 	//sleeping it for the delay
 	time.Sleep(totalDelay)
-	
+
 	//moving the job from processing queue to job queue, so that the jobworker can pick it up
 	//no error handling because if it fails, reaper will pick it up anyways
 	queue.RemoveFromProcessingAndInsertIntoJob(app.redisClient, job.ID)
@@ -169,7 +169,7 @@ func (app *App) ProcessNextJob() (string, error) {
 
 	err = appWorker.Process(job)
 	if err != nil {
-		slog.Error("error while processing job", "job_id", jobID, "attempt", job.Attempts + 1, "error", err.Error())
+		slog.Error("error while processing job", "job_id", jobID, "attempt", job.Attempts+1, "error", err.Error())
 		go app.ScheduleRetry(job, err)
 		slog.Info("job scheduled for retry", "job_id", jobID, "attempt", job.Attempts+1)
 		return jobID, nil
@@ -182,7 +182,6 @@ func (app *App) ProcessNextJob() (string, error) {
 	//remove from processing from success
 	queue.RemoveFromProcessing(app.redisClient, jobID)
 	slog.Info("job completed", "job_id", jobID)
-
 
 	return jobID, nil
 }
