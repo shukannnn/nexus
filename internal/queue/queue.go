@@ -87,6 +87,9 @@ func RemoveFromProcessingAndInsertIntoJob(client *redis.Client, jobID string, so
 	end`
 
 	if err := client.Eval(context.Background(), luaScript, []string{QUEUE_NAME, PROCESSING_QUEUE}, jobID).Err(); err != nil {
+		 if err == redis.Nil {
+            return
+        }
 		slog.Error("error while removing from processing queue and inserting into job queue", "error", err, "jobID", jobID, "source", source)
 	}
 }
