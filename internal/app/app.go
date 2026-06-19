@@ -114,7 +114,7 @@ func (app *App) ScheduleRetry(job *jobs.Job, cause error) {
 		slog.Error("error while updating the job status to retrying", "error", err, "jobID", job.ID)
 	}
 
-	slog.Info("retrying job", "jobID", job.ID, "attempt", attempts, "delay", totalDelay)
+	slog.Info("retrying job", "jobID", job.ID, "attempt", attempts, "delay", totalDelay, "attempts", job.Attempts + 1)
 
 	//sleeping it for the delay
 	time.Sleep(totalDelay)
@@ -171,7 +171,6 @@ func (app *App) ProcessNextJob() (string, error) {
 	if err != nil {
 		slog.Error("error while processing job", "job_id", jobID, "attempt", job.Attempts+1, "error", err.Error())
 		go app.ScheduleRetry(job, err)
-		slog.Info("job scheduled for retry", "job_id", jobID, "attempt", job.Attempts+1)
 		return jobID, nil
 	}
 
