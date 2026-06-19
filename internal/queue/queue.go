@@ -79,7 +79,7 @@ func UpdateValueInProcessingQueue(client *redis.Client, jobID string, expiryTime
 	}
 }
 
-func RemoveFromProcessingAndInsertIntoJob(client *redis.Client, jobID string) {
+func RemoveFromProcessingAndInsertIntoJob(client *redis.Client, jobID string, source string) {
 	luaScript := `
 	local removed = redis.call('ZREM', KEYS[2], ARGV[1])
 	if removed == 1 then
@@ -87,7 +87,7 @@ func RemoveFromProcessingAndInsertIntoJob(client *redis.Client, jobID string) {
 	end`
 
 	if err := client.Eval(context.Background(), luaScript, []string{QUEUE_NAME, PROCESSING_QUEUE}, jobID).Err(); err != nil {
-		slog.Error("error while removing from processing queue and inserting into job queue", "error", err, "jobID", jobID)
+		slog.Error("error while removing from processing queue and inserting into job queue", "error", err, "jobID", jobID, "source", source)
 	}
 }
 

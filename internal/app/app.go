@@ -121,7 +121,7 @@ func (app *App) ScheduleRetry(job *jobs.Job, cause error) {
 
 	//moving the job from processing queue to job queue, so that the jobworker can pick it up
 	//no error handling because if it fails, reaper will pick it up anyways
-	queue.RemoveFromProcessingAndInsertIntoJob(app.redisClient, job.ID)
+	queue.RemoveFromProcessingAndInsertIntoJob(app.redisClient, job.ID, "ScheduleRetry")
 }
 
 func (app *App) ProcessNextJob() (string, error) {
