@@ -81,7 +81,6 @@ func (h *Handler) getJob(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-
 func (h *Handler) replay(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 

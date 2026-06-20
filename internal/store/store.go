@@ -82,7 +82,7 @@ func GetJobByIDs(db *sql.DB, ids []string) ([]*jobs.Job, error) {
 		if err != nil {
 			return nil, fmt.Errorf("error while fetching job by id in fetchjobsbyids: %w", err)
 		}
-		
+
 		if last_error.Valid {
 			record.LastError = last_error.String
 		} else {
@@ -159,7 +159,7 @@ func MarkRetryingOrFailedWithError(db *sql.DB, job *jobs.Job, status string, las
 	return tx.Commit()
 }
 
-func GetDeadLetterJobByID(db *sql.DB, deadLetterJobID string) (*jobs.DeadLetterJob, error){
+func GetDeadLetterJobByID(db *sql.DB, deadLetterJobID string) (*jobs.DeadLetterJob, error) {
 	query := `SELECT id, job_id, type, payload, last_error, attempts, max_attempts, replay_job_id, created_at, updated_at FROM dead_letter_jobs WHERE id = $1`
 
 	var record jobs.DeadLetterJob
@@ -167,7 +167,7 @@ func GetDeadLetterJobByID(db *sql.DB, deadLetterJobID string) (*jobs.DeadLetterJ
 	var replay_job_id sql.NullString
 
 	err := db.QueryRow(query, deadLetterJobID).Scan(&record.ID, &record.JobID, &record.Type, &record.Payload, &last_error, &record.Attempts, &record.MaxAttempts, &replay_job_id, &record.CreatedAt, &record.UpdatedAt)
-	
+
 	if err != nil {
 		return nil, fmt.Errorf("error while fetching deadletterjob by id: %w", err)
 	}

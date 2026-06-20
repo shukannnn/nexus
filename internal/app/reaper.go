@@ -3,14 +3,13 @@ package app
 import (
 	"context"
 	"log/slog"
+	"nexus/internal/jobs"
 	"nexus/internal/queue"
 	"nexus/internal/store"
-	"nexus/internal/jobs"
 	"time"
 )
 
-
-func (app *App) Reap(){
+func (app *App) Reap() {
 	//getting stale jobs
 	result, err := queue.GetStaleJobs(app.redisClient)
 	if err != nil {
@@ -31,7 +30,6 @@ func (app *App) Reap(){
 
 	}
 
-
 	jobRows, err := store.GetJobByIDs(app.dbClient, jobIDs)
 	if err != nil {
 		slog.Error("error while getting job rows in reap", "error", err)
@@ -39,31 +37,31 @@ func (app *App) Reap(){
 	}
 
 	for _, job := range jobRows {
-		switch job.Status{
-			case jobs.StatusCompleted, jobs.StatusFailed:
-				//remove from processing queue as no longer needed
-				slog.Info("removing from processing as completed/failed", "jobID", job.ID)
-				queue.RemoveFromProcessing(app.redisClient, job.ID)
-			case jobs.StatusPending:
-				//remove from processing queue and add it to job 
+		switch job.Status {
+		case jobs.StatusCompleted, jobs.StatusFailed:
+			//remove from processing queue as no longer needed
+			slog.Info("removing from processing as completed/failed", "jobID", job.ID)
+			queue.RemoveFromProcessing(app.redisClient, job.ID)
+		case jobs.StatusPending:
+			//remove from processing queue and add it to job
+			queue.RemoveFromProcessingAndInsertIntoJob(app.redisClient, job.ID, "Reaper")
+			slog.Info("removing from processing and inserting into job as pending", "jobID", job.ID)
+		case jobs.StatusRetrying:
+			//check if the current time > stamp time
+			//if yes then job is stale so move to processing queue (keeping the status retrying won't do any harm)
+			//if no then keep it as it is
+			if time.Now().Unix() > jobsToScore[job.ID] {
 				queue.RemoveFromProcessingAndInsertIntoJob(app.redisClient, job.ID, "Reaper")
-				slog.Info("removing from processing and inserting into job as pending", "jobID", job.ID)
-			case jobs.StatusRetrying:
-				//check if the current time > stamp time
-				//if yes then job is stale so move to processing queue (keeping the status retrying won't do any harm)
-				//if no then keep it as it is
-				if time.Now().Unix() > jobsToScore[job.ID]{
-					queue.RemoveFromProcessingAndInsertIntoJob(app.redisClient, job.ID, "Reaper")
-					slog.Info("removing from processing and inserting into job as retrying and stale", "jobID", job.ID)
-				}
-			case jobs.StatusProcessing:
-				//check the currenttime > stamp time + visibility timeout
-				//if yes then stale job, remove from processing and add to jobs (keeping the status processing won't do any harm)
-				//if mo then keep it as it is
-				if time.Now().Unix() > (jobsToScore[job.ID] + int64(app.visibilityTimeout)){
-					queue.RemoveFromProcessingAndInsertIntoJob(app.redisClient, job.ID, "Reaper")
-					slog.Info("removing from processing and inserting into job as processing and stale", "jobID", job.ID)
-				}
+				slog.Info("removing from processing and inserting into job as retrying and stale", "jobID", job.ID)
+			}
+		case jobs.StatusProcessing:
+			//check the currenttime > stamp time + visibility timeout
+			//if yes then stale job, remove from processing and add to jobs (keeping the status processing won't do any harm)
+			//if mo then keep it as it is
+			if time.Now().Unix() > (jobsToScore[job.ID] + int64(app.visibilityTimeout)) {
+				queue.RemoveFromProcessingAndInsertIntoJob(app.redisClient, job.ID, "Reaper")
+				slog.Info("removing from processing and inserting into job as processing and stale", "jobID", job.ID)
+			}
 		}
 	}
 
