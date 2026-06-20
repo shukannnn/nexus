@@ -28,6 +28,7 @@ func (h *Handler) Routes() http.Handler {
 
 	r.Get("/jobs/{id}", h.getJob)
 	r.Post("/jobs", h.createJob)
+	r.Get("/dead-letter/:id/replay", h.replay)
 
 	return r
 }
@@ -75,6 +76,31 @@ func (h *Handler) getJob(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	if resErr := json.NewEncoder(w).Encode(&job); resErr != nil {
+		http.Error(w, resErr.Error(), http.StatusInternalServerError)
+		return
+	}
+}
+
+
+func (h *Handler) replay(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id")
+
+	jobID, err := h.app.ReplayDeadLetterJob(id)
+
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	res := struct {
+		ID string `json:"id"`
+	}{
+		ID: jobID,
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	if resErr := json.NewEncoder(w).Encode(&res); resErr != nil {
 		http.Error(w, resErr.Error(), http.StatusInternalServerError)
 		return
 	}

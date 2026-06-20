@@ -186,6 +186,30 @@ func (app *App) ProcessNextJob() (string, error) {
 	return jobID, nil
 }
 
+func (app *App) ReplayDeadLetterJob(deadLetterJobID string) (string, error) {
+	
+	//getting the dead letter job from db
+	deadLetterJob, err := store.GetDeadLetterJobByID(app.dbClient, deadLetterJobID)
+	if err != nil {
+		return "", err
+	}
+
+	//creating a new job
+	job := jobs.New(deadLetterJob.Type, deadLetterJob.Payload)
+
+	//replay the job by creating a job in jobs table and updating the replay job id column in dead letter queue
+	if err := store.ReplayDeadLetterJob(app.dbClient, deadLetterJob, job); err != nil {
+		return "", err
+	}
+
+	//enqueue the job in jobs queue
+	if err := queue.Enqueue(app.redisClient, job.ID); err != nil {
+		return "", err
+	}
+
+	return job.ID, nil
+}
+
 func (app *App) Close() error {
 	var errs []error
 

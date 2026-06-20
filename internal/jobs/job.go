@@ -24,6 +24,19 @@ type JobError struct {
 	CreatedAt string `json:"created_at"`
 }
 
+type DeadLetterJob struct {
+	ID          string          `json:"id"`
+	JobID       string          `json:"job_id"`
+	Type        string          `json:"type"`
+	Payload     json.RawMessage `json:"payload"`
+	LastError   string          `json:"last_error"`
+	Attempts    int             `json:"attempts"`
+	MaxAttempts int             `json:"max_attempts"`
+	ReplayJobID string          `json:"replay_job_id"`
+	CreatedAt   string          `json:"created_at"`
+	UpdatedAt   string          `json:"updated_at"`
+}
+
 const (
 	StatusPending    = "pending"
 	StatusProcessing = "processing"

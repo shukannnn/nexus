@@ -158,3 +158,60 @@ func MarkRetryingOrFailedWithError(db *sql.DB, job *jobs.Job, status string, las
 
 	return tx.Commit()
 }
+
+func GetDeadLetterJobByID(db *sql.DB, deadLetterJobID string) (*jobs.DeadLetterJob, error){
+	query := `SELECT id, job_id, type, payload, last_error, attempts, max_attempts, replay_job_id, created_at, updated_at FROM dead_letter_jobs WHERE id = $1`
+
+	var record jobs.DeadLetterJob
+	var last_error sql.NullString
+	var replay_job_id sql.NullString
+
+	err := db.QueryRow(query, deadLetterJobID).Scan(&record.ID, &record.JobID, &record.Type, &record.Payload, &last_error, &record.Attempts, &record.MaxAttempts, &replay_job_id, &record.CreatedAt, &record.UpdatedAt)
+	
+	if err != nil {
+		return nil, fmt.Errorf("error while fetching deadletterjob by id: %w", err)
+	}
+
+	if last_error.Valid {
+		record.LastError = last_error.String
+	} else {
+		record.LastError = ""
+	}
+
+	if replay_job_id.Valid {
+		record.ReplayJobID = replay_job_id.String
+	} else {
+		record.ReplayJobID = ""
+	}
+
+	return &record, nil
+}
+
+func ReplayDeadLetterJob(db *sql.DB, deadLetterJob *jobs.DeadLetterJob, job *jobs.Job) error {
+
+	//begin transaction
+	tx, err := db.Begin()
+
+	if err != nil {
+		return fmt.Errorf("transaction begin error in replay dead letter job: %w", err)
+	}
+	defer tx.Rollback()
+
+	//insert the new job into the db
+	query := `INSERT INTO jobs (id, type, payload, status, attempts, max_attempts, last_error) 
+			VALUES ($1, $2, $3, $4, $5, $6, $7)`
+
+	_, err = tx.Exec(query, job.ID, job.Type, job.Payload, job.Status, job.Attempts, job.MaxAttempts, job.LastError)
+	if err != nil {
+		return fmt.Errorf("error while inserting a new job during replay dead letter job : %w", err)
+	}
+
+	//update the deadlettertable to the replay jobid
+	query = `UPDATE dead_letter_jobs SET replay_job_id = $1 WHERE id = $2`
+	_, err = tx.Exec(query, job.ID, deadLetterJob.ID)
+	if err != nil {
+		return fmt.Errorf("error while updating replay job id in replay dead letter job : %w", err)
+	}
+
+	return tx.Commit()
+}
