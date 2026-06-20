@@ -9,3 +9,9 @@ CREATE TABLE jobs (
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+
+
+CREATE TRIGGER jobs_updated_at_trigger
+BEFORE UPDATE ON jobs
+FOR EACH ROW
+EXECUTE FUNCTION update_updated_at_column();
