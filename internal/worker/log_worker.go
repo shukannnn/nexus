@@ -25,7 +25,7 @@ func (_ LogWorker) Process(job *jobs.Job) error {
 		return fmt.Errorf("empty payload message.")
 	}
 
-	slog.Info("processing logworker", "job_id", job.ID, "attempts number", job.Attempts+1)
+	slog.Info("processing logworker", "job_id", job.ID, "attempt number", job.Attempts)
 	fmt.Printf("output of logworker: %s\n", payload.Message)
 	slog.Info("logworker job completed", "job_id", job.ID)
 

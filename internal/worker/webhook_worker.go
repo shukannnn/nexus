@@ -36,7 +36,7 @@ func (_ WebHookWorker) Process(job *jobs.Job) error {
 		return fmt.Errorf("empty secret.")
 	}
 
-	slog.Info("processing webhookworker", "job_id", job.ID, "attempts number", job.Attempts+1)
+	slog.Info("processing webhookworker", "job_id", job.ID, "attempt number", job.Attempts)
 
 	mac := hmac.New(sha256.New, []byte(payload.Secret))
 	mac.Write([]byte(payload.Payload))
