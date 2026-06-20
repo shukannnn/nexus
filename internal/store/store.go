@@ -124,12 +124,12 @@ func MarkProcessingAndIncrementAttempts(db *sql.DB, id string) error {
 	return nil
 }
 
-func MarkRetryingOrFailedWithError(db *sql.DB, id string, attempt int, status string, last_error string) error {
+func MarkRetryingOrFailedWithError(db *sql.DB, job *jobs.Job, status string, last_error string) error {
 
 	if status == jobs.StatusFailed {
-		slog.Error("job failed", "job_id", id, "error", last_error)
+		slog.Error("job failed", "job_id", job.ID, "error", last_error)
 	} else {
-		slog.Warn("job retrying", "job_id", id, "error", last_error)
+		slog.Warn("job retrying", "job_id", job.ID, "error", last_error)
 	}
 
 	//using transaction to update the status and error table
@@ -140,13 +140,20 @@ func MarkRetryingOrFailedWithError(db *sql.DB, id string, attempt int, status st
 	defer tx.Rollback()
 
 	query := `UPDATE jobs set status = $1, last_error = $2 where id = $3`
-	if _, err := tx.Exec(query, status, last_error, id); err != nil {
+	if _, err := tx.Exec(query, status, last_error, job.ID); err != nil {
 		return fmt.Errorf("error updating job status: %w", err)
 	}
 
 	query = `INSERT INTO job_errors (job_id, attempt, error) VALUES ($1, $2, $3)`
-	if _, err := tx.Exec(query, id, attempt, last_error); err != nil {
+	if _, err := tx.Exec(query, job.ID, job.Attempts, last_error); err != nil {
 		return fmt.Errorf("error inserting job error: %w", err)
+	}
+
+	if status == jobs.StatusFailed {
+		query := `INSERT INTO dead_letter_jobs (job_id, type, payload, last_error, attempts, max_attempts) VALUES ($1, $2, $3, $4, $5, $6)`
+		if _, err := tx.Exec(query, job.ID, job.Type, job.Payload, last_error, job.Attempts, job.MaxAttempts); err != nil {
+			return fmt.Errorf("error inserting dead letter job: %w", err)
+		}
 	}
 
 	return tx.Commit()

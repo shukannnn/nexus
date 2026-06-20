@@ -63,7 +63,7 @@ func (app *App) CreatePersistAndEnqueueJob(jobType string, payload json.RawMessa
 		return "", fmt.Errorf("error inserting job into database: %w", err)
 	}
 	if errRedis := queue.Enqueue(app.redisClient, job.ID); errRedis != nil {
-		if err := store.MarkRetryingOrFailedWithError(app.dbClient, job.ID, job.Attempts, jobs.StatusFailed, errRedis.Error()); err != nil {
+		if err := store.MarkRetryingOrFailedWithError(app.dbClient, job, jobs.StatusFailed, errRedis.Error()); err != nil {
 			var errs []error
 			errs = append(append(errs, err), errRedis)
 			return "", errors.Join(errs...)
@@ -94,13 +94,11 @@ func (app *App) getWorkerForType(jobType string) (worker.Worker, error) {
 }
 
 func (app *App) ScheduleRetry(job *jobs.Job, cause error) {
-	//attempts will be the job.Attempts + 1
-	attempts := job.Attempts + 1
 
 	//calculating delay
 	base := 2 * time.Second
-	delay := base * time.Duration(math.Pow(2, float64(attempts)))
-	jitter := time.Duration(rand.Intn(attempts*5)) * time.Second
+	delay := base * time.Duration(math.Pow(2, float64(job.Attempts)))
+	jitter := time.Duration(rand.Intn(job.Attempts*5)) * time.Second
 	totalDelay := delay + jitter
 
 	//re-stamp the jobID value in processing set to expiry time so that reaper can know whether it is being retried or not
@@ -110,11 +108,11 @@ func (app *App) ScheduleRetry(job *jobs.Job, cause error) {
 
 	//now we will mark this as retrying
 	//we did not mark it before because reaper can get retrying status but it might have the old timestamp in processing set
-	if err := store.MarkRetryingOrFailedWithError(app.dbClient, job.ID, job.Attempts+1, jobs.StatusRetrying, cause.Error()); err != nil {
+	if err := store.MarkRetryingOrFailedWithError(app.dbClient, job, jobs.StatusRetrying, cause.Error()); err != nil {
 		slog.Error("error while updating the job status to retrying", "error", err, "jobID", job.ID)
 	}
 
-	slog.Info("retrying job", "jobID", job.ID, "attempt", attempts, "delay", totalDelay, "attempts", job.Attempts + 1)
+	slog.Info("retrying job", "jobID", job.ID, "delay", totalDelay, "attempts", job.Attempts)
 
 	//sleeping it for the delay
 	time.Sleep(totalDelay)
@@ -144,7 +142,7 @@ func (app *App) ProcessNextJob() (string, error) {
 
 	if job.Attempts >= job.MaxAttempts {
 		slog.Warn("job exceeded max attempts", "job_id", jobID, "attempts", job.Attempts)
-		if err := store.MarkRetryingOrFailedWithError(app.dbClient, jobID, job.Attempts+1, jobs.StatusFailed, "max attempts exceeded"); err != nil {
+		if err := store.MarkRetryingOrFailedWithError(app.dbClient, job, jobs.StatusFailed, "max attempts exceeded"); err != nil {
 			return "", fmt.Errorf("error while updating status to failure for max attempts: %w", err)
 		}
 		// remove it from processing set when failure
@@ -156,10 +154,13 @@ func (app *App) ProcessNextJob() (string, error) {
 		return "", fmt.Errorf("error while updating status of the job to processing: %w", err)
 	}
 
+	// increaseing the attempt here as db got incremented.
+	job.Attempts += 1
+
 	//getting the jobworker
 	appWorker, err := app.getWorkerForType(job.Type)
 	if err != nil {
-		if err := store.MarkRetryingOrFailedWithError(app.dbClient, jobID, job.Attempts+1, jobs.StatusFailed, err.Error()); err != nil {
+		if err := store.MarkRetryingOrFailedWithError(app.dbClient, job, jobs.StatusFailed, err.Error()); err != nil {
 			return "", fmt.Errorf("error while updating the job status to retrying: %w", err)
 		}
 		// remove it from processing set when failure
@@ -169,7 +170,7 @@ func (app *App) ProcessNextJob() (string, error) {
 
 	err = appWorker.Process(job)
 	if err != nil {
-		slog.Error("error while processing job", "job_id", jobID, "attempt", job.Attempts+1, "error", err.Error())
+		slog.Error("error while processing job", "job_id", jobID, "attempt", job.Attempts, "error", err.Error())
 		go app.ScheduleRetry(job, err)
 		return jobID, nil
 	}
