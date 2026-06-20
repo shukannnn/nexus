@@ -187,7 +187,9 @@ func (app *App) ProcessNextJob() (string, error) {
 }
 
 func (app *App) ReplayDeadLetterJob(deadLetterJobID string) (string, error) {
-	
+
+	slog.Info("replaying job", "ID", deadLetterJobID)
+
 	//getting the dead letter job from db
 	deadLetterJob, err := store.GetDeadLetterJobByID(app.dbClient, deadLetterJobID)
 	if err != nil {
@@ -206,6 +208,8 @@ func (app *App) ReplayDeadLetterJob(deadLetterJobID string) (string, error) {
 	if err := queue.Enqueue(app.redisClient, job.ID); err != nil {
 		return "", err
 	}
+
+	slog.Info("replayed job successfully", "ID", deadLetterJobID)
 
 	return job.ID, nil
 }
