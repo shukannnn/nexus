@@ -28,7 +28,7 @@ func (h *Handler) Routes() http.Handler {
 
 	r.Get("/jobs/{id}", h.getJob)
 	r.Post("/jobs", h.createJob)
-	r.Get("/dead-letter/:id/replay", h.replay)
+	r.Post("/dead-letter/{id}/replay", h.replay)
 
 	return r
 }

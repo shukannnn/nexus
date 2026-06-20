@@ -57,7 +57,10 @@ func (app *App) GetJobByID(id string) (*jobs.Job, error) {
 }
 
 func (app *App) CreatePersistAndEnqueueJob(jobType string, payload json.RawMessage) (string, error) {
-
+	// KNOWN GAP: if the process crashes between the Postgres commit and this enqueue call,
+	// the job stays "pending" in Postgres but never reaches Redis, and nothing currently
+	// recovers it. Proper fix would be a
+	// transactional outbox pattern if this ever becomes a real problem.
 	job := jobs.New(jobType, payload)
 	if err := store.InsertJob(app.dbClient, job); err != nil {
 		return "", fmt.Errorf("error inserting job into database: %w", err)
@@ -187,6 +190,11 @@ func (app *App) ProcessNextJob() (string, error) {
 }
 
 func (app *App) ReplayDeadLetterJob(deadLetterJobID string) (string, error) {
+
+	// KNOWN GAP: if the process crashes between the Postgres commit and this enqueue call,
+	// the job stays "pending" in Postgres but never reaches Redis, and nothing currently
+	// recovers it. Proper fix would be a
+	// transactional outbox pattern if this ever becomes a real problem.
 
 	slog.Info("replaying job", "ID", deadLetterJobID)
 
