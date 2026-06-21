@@ -2,6 +2,7 @@ package worker
 
 import (
 	"bytes"
+	"context"
 	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/hex"
@@ -10,7 +11,6 @@ import (
 	"log/slog"
 	"net/http"
 	"nexus/internal/jobs"
-	"time"
 )
 
 type WebHookWorker struct {
@@ -22,7 +22,9 @@ type WebHookWorkerPayload struct {
 	Secret  string          `json:"secret"`
 }
 
-func (_ WebHookWorker) Process(job *jobs.Job) error {
+var httpClient = &http.Client{}
+
+func (_ WebHookWorker) Process(ctx context.Context, job *jobs.Job) error {
 	var payload WebHookWorkerPayload
 	if err := json.Unmarshal(job.Payload, &payload); err != nil {
 		return fmt.Errorf("error while reading paylaod of webhookworker : %w", err)
@@ -42,7 +44,7 @@ func (_ WebHookWorker) Process(job *jobs.Job) error {
 	mac.Write([]byte(payload.Payload))
 	signature := hex.EncodeToString(mac.Sum(nil))
 
-	req, err := http.NewRequest(http.MethodPost, payload.URL, bytes.NewReader(payload.Payload))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, payload.URL, bytes.NewReader(payload.Payload))
 	if err != nil {
 		return fmt.Errorf("error while making post request for webhookworker : %w", err)
 	}
@@ -50,8 +52,7 @@ func (_ WebHookWorker) Process(job *jobs.Job) error {
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("X-Nexus-Signature", signature)
 
-	client := &http.Client{Timeout: 10 * time.Second}
-	resp, err := client.Do(req)
+	resp, err := httpClient.Do(req)
 	if err != nil {
 		return fmt.Errorf("webhook delivery failed with error: %w", err)
 	}

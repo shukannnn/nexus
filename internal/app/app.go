@@ -1,6 +1,7 @@
 package app
 
 import (
+	"context"
 	"database/sql"
 	"encoding/json"
 	"errors"
@@ -25,6 +26,8 @@ type App struct {
 	reapInterval      int
 	visibilityTimeout int
 }
+
+const jobTimeout = 30 * time.Second
 
 func NewApp(cfg *config.Config) (*App, error) {
 
@@ -125,7 +128,7 @@ func (app *App) ScheduleRetry(job *jobs.Job, cause error) {
 	queue.RemoveFromProcessingAndInsertIntoJob(app.redisClient, job.ID, "ScheduleRetry")
 }
 
-func (app *App) ProcessNextJob() (string, error) {
+func (app *App) ProcessNextJob(ctx context.Context) (string, error) {
 
 	jobID, err := queue.GetJobIDFromRedis(app.redisClient)
 	if err != nil {
@@ -171,7 +174,12 @@ func (app *App) ProcessNextJob() (string, error) {
 		return jobID, nil
 	}
 
-	err = appWorker.Process(job)
+	//creating a timeout-context
+	//right now it is harcoded but we need to have worker wise timeout
+	jobCtx, cancelJob := context.WithTimeout(ctx, jobTimeout)
+	defer cancelJob()
+
+	err = appWorker.Process(jobCtx, job)
 	if err != nil {
 		slog.Error("error while processing job", "job_id", jobID, "attempt", job.Attempts, "error", err.Error())
 		go app.ScheduleRetry(job, err)

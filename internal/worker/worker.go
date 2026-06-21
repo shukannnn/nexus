@@ -1,9 +1,10 @@
 package worker
 
 import (
+	"context"
 	"nexus/internal/jobs"
 )
 
 type Worker interface {
-	Process(job *jobs.Job) error
+	Process(ctx context.Context, job *jobs.Job) error
 }

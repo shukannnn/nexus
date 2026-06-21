@@ -1,6 +1,7 @@
 package worker
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"log/slog"
@@ -14,7 +15,7 @@ type LogWorkerPayload struct {
 	Message string `json:"message"`
 }
 
-func (_ LogWorker) Process(job *jobs.Job) error {
+func (_ LogWorker) Process(ctx context.Context, job *jobs.Job) error {
 
 	var payload LogWorkerPayload
 	if err := json.Unmarshal(job.Payload, &payload); err != nil {

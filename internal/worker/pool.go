@@ -8,10 +8,10 @@ import (
 
 type Pool struct {
 	poolSize   int
-	processJob func() (string, error)
+	processJob func(ctx context.Context) (string, error)
 }
 
-func NewPool(poolSize int, processJob func() (string, error)) *Pool {
+func NewPool(poolSize int, processJob func(context.Context) (string, error)) *Pool {
 	return &Pool{
 		poolSize:   poolSize,
 		processJob: processJob,
@@ -26,7 +26,7 @@ func (pool *Pool) Start(ctx context.Context) {
 				case <-ctx.Done():
 					return
 				default:
-					jobID, err := pool.processJob()
+					jobID, err := pool.processJob(ctx)
 					if err != nil {
 						slog.Error("job processed by worker with error", "jobId", jobID, "error", err)
 					}
