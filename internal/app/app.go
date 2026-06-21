@@ -27,8 +27,6 @@ type App struct {
 	visibilityTimeout int
 }
 
-const jobTimeout = 30 * time.Second
-
 func NewApp(cfg *config.Config) (*App, error) {
 
 	dbClient, err := store.Open(cfg.DatabaseURL)
@@ -175,8 +173,7 @@ func (app *App) ProcessNextJob(ctx context.Context) (string, error) {
 	}
 
 	//creating a timeout-context
-	//right now it is harcoded but we need to have worker wise timeout
-	jobCtx, cancelJob := context.WithTimeout(ctx, jobTimeout)
+	jobCtx, cancelJob := context.WithTimeout(ctx, appWorker.Timeout())
 	defer cancelJob()
 
 	err = appWorker.Process(jobCtx, job)

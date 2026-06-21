@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"nexus/internal/jobs"
+	"time"
 )
 
 type LogWorker struct {
@@ -13,6 +14,10 @@ type LogWorker struct {
 
 type LogWorkerPayload struct {
 	Message string `json:"message"`
+}
+
+func (_ LogWorker) Timeout() time.Duration {
+	return time.Second * 3
 }
 
 func (_ LogWorker) Process(ctx context.Context, job *jobs.Job) error {

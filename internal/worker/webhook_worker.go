@@ -11,6 +11,7 @@ import (
 	"log/slog"
 	"net/http"
 	"nexus/internal/jobs"
+	"time"
 )
 
 type WebHookWorker struct {
@@ -23,6 +24,10 @@ type WebHookWorkerPayload struct {
 }
 
 var httpClient = &http.Client{}
+
+func (_ WebHookWorker) Timeout() time.Duration {
+	return time.Second * 30
+}
 
 func (_ WebHookWorker) Process(ctx context.Context, job *jobs.Job) error {
 	var payload WebHookWorkerPayload
