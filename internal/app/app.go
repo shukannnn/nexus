@@ -87,7 +87,7 @@ func (app *App) getWorkerForType(jobType string) (worker.Worker, error) {
 		appWorker = worker.LogWorker{}
 
 	case "webhook":
-		appWorker = worker.WebHookWorker{}
+		appWorker = worker.NewWebHookWorker(app.dbClient)
 
 	default:
 		return nil, fmt.Errorf("invalid job type: %s", jobType)

@@ -5,16 +5,19 @@ import (
 	"context"
 	"crypto/hmac"
 	"crypto/sha256"
+	"database/sql"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"log/slog"
 	"net/http"
 	"nexus/internal/jobs"
+	"nexus/internal/store"
 	"time"
 )
 
 type WebHookWorker struct {
+	db *sql.DB
 }
 
 type WebHookWorkerPayload struct {
@@ -25,11 +28,15 @@ type WebHookWorkerPayload struct {
 
 var httpClient = &http.Client{}
 
+func NewWebHookWorker(db *sql.DB) WebHookWorker {
+    return WebHookWorker{db: db}
+}
+
 func (_ WebHookWorker) Timeout() time.Duration {
 	return time.Second * 30
 }
 
-func (_ WebHookWorker) Process(ctx context.Context, job *jobs.Job) error {
+func (worker WebHookWorker) Process(ctx context.Context, job *jobs.Job) error {
 	var payload WebHookWorkerPayload
 	if err := json.Unmarshal(job.Payload, &payload); err != nil {
 		return fmt.Errorf("error while reading paylaod of webhookworker : %w", err)
@@ -41,6 +48,15 @@ func (_ WebHookWorker) Process(ctx context.Context, job *jobs.Job) error {
 
 	if payload.Secret == "" {
 		return fmt.Errorf("empty secret.")
+	}
+
+	//check if the request has already been made?
+	exists, err := store.CheckWebhookDelivered(worker.db, job.ID)
+	//if error is not nil we will assume the hook is not delivered based on the assumption the receiver is idempotent
+	if err == nil && exists == true {
+		//webhook already delivered
+		slog.Info("webhook already delivered", "jobID", job.ID)
+		return nil
 	}
 
 	slog.Info("processing webhookworker", "job_id", job.ID, "attempt number", job.Attempts)
@@ -56,6 +72,7 @@ func (_ WebHookWorker) Process(ctx context.Context, job *jobs.Job) error {
 
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("X-Nexus-Signature", signature)
+	req.Header.Set("X-Nexus-Delivery-ID", job.ID)
 
 	resp, err := httpClient.Do(req)
 	if err != nil {
@@ -70,5 +87,11 @@ func (_ WebHookWorker) Process(ctx context.Context, job *jobs.Job) error {
 		return fmt.Errorf("webhook delivery failed with status: %d", resp.StatusCode)
 	}
 	slog.Info("webhook delivered", "url", payload.URL, "status", resp.StatusCode)
+	
+	//insert the webhook into db, if failed we will ignore it as the receiver is idempotent
+	if err := store.InsertWebhookDelivery(worker.db, job.ID); err != nil {
+		slog.Info("webhook inserting failed with error", "error", err, "jobID", job.ID)
+	}
+
 	return nil
 }

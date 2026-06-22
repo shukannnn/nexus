@@ -31,6 +31,7 @@ func (_ LogWorker) Process(ctx context.Context, job *jobs.Job) error {
 		return fmt.Errorf("empty payload message.")
 	}
 
+	//no idempotemcy check needed here.
 	slog.Info("processing logworker", "job_id", job.ID, "attempt number", job.Attempts)
 	fmt.Printf("output of logworker: %s\n", payload.Message)
 	slog.Info("logworker job completed", "job_id", job.ID)

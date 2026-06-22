@@ -215,3 +215,24 @@ func ReplayDeadLetterJob(db *sql.DB, deadLetterJob *jobs.DeadLetterJob, job *job
 
 	return tx.Commit()
 }
+
+func CheckWebhookDelivered(db *sql.DB, jobID string) (bool, error) {
+	query := `SELECT EXISTS(SELECT 1 FROM webhook_deliveries WHERE job_id = $1)`
+
+	var exists bool
+	err := db.QueryRow(query, jobID).Scan(&exists)
+	if err != nil {
+		return false, fmt.Errorf("error while checking webhook delivery: %w", err)
+	}
+	return exists, nil
+}
+
+func InsertWebhookDelivery(db *sql.DB, jobID string) error {
+	query := `INSERT into webhook_deliveries(job_id) values ($1)`
+	_, err := db.Exec(query, jobID)
+
+	if err != nil {
+		return fmt.Errorf("error while inserting into webhook deliveries: %w", err)
+	}
+	return nil
+}
