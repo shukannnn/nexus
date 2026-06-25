@@ -216,23 +216,32 @@ func ReplayDeadLetterJob(db *sql.DB, deadLetterJob *jobs.DeadLetterJob, job *job
 	return tx.Commit()
 }
 
-func CheckWebhookDelivered(db *sql.DB, jobID string) (bool, error) {
-	query := `SELECT EXISTS(SELECT 1 FROM webhook_deliveries WHERE job_id = $1)`
+func ClaimWebhookDelivery(db *sql.DB, jobID string) (bool, error) {
+	query := `INSERT into webhook_deliveries(job_id) values ($1) on CONFLICT (job_id) do nothing`
 
-	var exists bool
-	err := db.QueryRow(query, jobID).Scan(&exists)
+	count, err := db.Exec(query, jobID)
 	if err != nil {
-		return false, fmt.Errorf("error while checking webhook delivery: %w", err)
+		return false, fmt.Errorf("error while claiming webhook : %w", err)
 	}
-	return exists, nil
+	rowsAffected, err := count.RowsAffected()
+	if err != nil {
+		return false, fmt.Errorf("error while claiming webhook : %w", err)
+	}
+	return (rowsAffected > 0), nil
 }
 
-func InsertWebhookDelivery(db *sql.DB, jobID string) error {
-	query := `INSERT into webhook_deliveries(job_id) values ($1)`
-	_, err := db.Exec(query, jobID)
+func ReleaseWebhookDelivery(db *sql.DB, jobID string) error {
+	query := `UPDATE webhook_deliveries SET status = 'delivered' where job_id = $1`
+	if _, err := db.Exec(query, jobID); err != nil {
+		return fmt.Errorf("error while releasing webhook : %w", err)
+	}
+	return nil
+}
 
-	if err != nil {
-		return fmt.Errorf("error while inserting into webhook deliveries: %w", err)
+func DeleteWebhookDelivery(db *sql.DB, jobID string) error {
+	query := `DELETE from webhook_deliveries where job_id = $1`
+	if _, err := db.Exec(query, jobID); err != nil {
+		return fmt.Errorf("error while deleting webhook : %w", err)
 	}
 	return nil
 }

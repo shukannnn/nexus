@@ -51,12 +51,15 @@ func (worker WebHookWorker) Process(ctx context.Context, job *jobs.Job) error {
 	}
 
 	//check if the request has already been made?
-	exists, err := store.CheckWebhookDelivered(worker.db, job.ID)
-	//if error is not nil we will assume the hook is not delivered based on the assumption the receiver is idempotent
-	if err == nil && exists == true {
-		//webhook already delivered
-		slog.Info("webhook already delivered", "jobID", job.ID)
+	claimed, err := store.ClaimWebhookDelivery(worker.db, job.ID)
+	if err == nil && claimed == false {
+		//webhook already handled by another job
+		slog.Info("webhook already handled by another job", "jobID", job.ID)
 		return nil
+	} else if err != nil {
+		//delete the webhook delivery from table
+		store.DeleteWebhookDelivery(worker.db, job.ID)
+		return err
 	}
 
 	slog.Info("processing webhookworker", "job_id", job.ID, "attempt number", job.Attempts)
@@ -67,6 +70,8 @@ func (worker WebHookWorker) Process(ctx context.Context, job *jobs.Job) error {
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, payload.URL, bytes.NewReader(payload.Payload))
 	if err != nil {
+		//delete the webhook delivery from table
+		store.DeleteWebhookDelivery(worker.db, job.ID)
 		return fmt.Errorf("error while making post request for webhookworker : %w", err)
 	}
 
@@ -76,6 +81,8 @@ func (worker WebHookWorker) Process(ctx context.Context, job *jobs.Job) error {
 
 	resp, err := httpClient.Do(req)
 	if err != nil {
+		//delete the webhook delivery from table
+		store.DeleteWebhookDelivery(worker.db, job.ID)
 		return fmt.Errorf("webhook delivery failed with error: %w", err)
 	}
 	defer func() {
@@ -84,13 +91,17 @@ func (worker WebHookWorker) Process(ctx context.Context, job *jobs.Job) error {
 		}
 	}()
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		//delete the webhook delivery from table
+		store.DeleteWebhookDelivery(worker.db, job.ID)
 		return fmt.Errorf("webhook delivery failed with status: %d", resp.StatusCode)
 	}
 	slog.Info("webhook delivered", "url", payload.URL, "status", resp.StatusCode)
 	
 	//insert the webhook into db, if failed we will ignore it as the receiver is idempotent
-	if err := store.InsertWebhookDelivery(worker.db, job.ID); err != nil {
-		slog.Info("webhook inserting failed with error", "error", err, "jobID", job.ID)
+	if err := store.ReleaseWebhookDelivery(worker.db, job.ID); err != nil {
+		//delete the webhook delivery from table
+		store.DeleteWebhookDelivery(worker.db, job.ID)
+		return err
 	}
 
 	return nil
