@@ -52,14 +52,23 @@ func (worker WebHookWorker) Process(ctx context.Context, job *jobs.Job) error {
 
 	//check if the request has already been made?
 	claimed, err := store.ClaimWebhookDelivery(worker.db, job.ID)
-	if err == nil && claimed == false {
-		//webhook already handled by another job
-		slog.Info("webhook already handled by another job", "jobID", job.ID)
-		return nil
-	} else if err != nil {
+	if err != nil {
 		//delete the webhook delivery from table
 		store.DeleteWebhookDelivery(worker.db, job.ID)
 		return err
+	}
+
+	if !claimed {
+		// row exists — but is it actually delivered?
+		delivered, err := store.IsWebhookDelivered(worker.db, job.ID)
+		if err != nil {
+			return err
+		}
+		if delivered {
+			slog.Info("webhook already delivered, skipping", "jobID", job.ID)
+			return nil
+		}
+		// status is still pending — previous attempt crashed, fall through and retry
 	}
 
 	slog.Info("processing webhookworker", "job_id", job.ID, "attempt number", job.Attempts)
@@ -97,10 +106,8 @@ func (worker WebHookWorker) Process(ctx context.Context, job *jobs.Job) error {
 	}
 	slog.Info("webhook delivered", "url", payload.URL, "status", resp.StatusCode)
 	
-	//insert the webhook into db, if failed we will ignore it as the receiver is idempotent
+	//update the status in db
 	if err := store.ReleaseWebhookDelivery(worker.db, job.ID); err != nil {
-		//delete the webhook delivery from table
-		store.DeleteWebhookDelivery(worker.db, job.ID)
 		return err
 	}
 

@@ -230,6 +230,17 @@ func ClaimWebhookDelivery(db *sql.DB, jobID string) (bool, error) {
 	return (rowsAffected > 0), nil
 }
 
+func IsWebhookDelivered(db *sql.DB, jobID string) (bool, error) {
+    query := `SELECT EXISTS(SELECT 1 FROM webhook_deliveries WHERE job_id = $1 AND status = 'delivered')`
+    
+    var exists bool
+    err := db.QueryRow(query, jobID).Scan(&exists)
+    if err != nil {
+        return false, fmt.Errorf("error while checking webhook is delivered: %w", err)
+    }
+    return exists, nil
+}
+
 func ReleaseWebhookDelivery(db *sql.DB, jobID string) error {
 	query := `UPDATE webhook_deliveries SET status = 'delivered' where job_id = $1`
 	if _, err := db.Exec(query, jobID); err != nil {
