@@ -29,7 +29,7 @@ type WebHookWorkerPayload struct {
 var httpClient = &http.Client{}
 
 func NewWebHookWorker(db *sql.DB) WebHookWorker {
-    return WebHookWorker{db: db}
+	return WebHookWorker{db: db}
 }
 
 func (_ WebHookWorker) Timeout() time.Duration {
@@ -105,7 +105,7 @@ func (worker WebHookWorker) Process(ctx context.Context, job *jobs.Job) error {
 		return fmt.Errorf("webhook delivery failed with status: %d", resp.StatusCode)
 	}
 	slog.Info("webhook delivered", "url", payload.URL, "status", resp.StatusCode)
-	
+
 	//update the status in db
 	if err := store.ReleaseWebhookDelivery(worker.db, job.ID); err != nil {
 		return err

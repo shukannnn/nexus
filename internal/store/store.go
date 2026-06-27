@@ -5,9 +5,8 @@ import (
 	"fmt"
 	"log/slog"
 	"nexus/internal/jobs"
-
+	
 	"github.com/lib/pq"
-	_ "github.com/lib/pq"
 )
 
 func Open(databaseURL string) (*sql.DB, error) {
@@ -231,14 +230,14 @@ func ClaimWebhookDelivery(db *sql.DB, jobID string) (bool, error) {
 }
 
 func IsWebhookDelivered(db *sql.DB, jobID string) (bool, error) {
-    query := `SELECT EXISTS(SELECT 1 FROM webhook_deliveries WHERE job_id = $1 AND status = 'delivered')`
-    
-    var exists bool
-    err := db.QueryRow(query, jobID).Scan(&exists)
-    if err != nil {
-        return false, fmt.Errorf("error while checking webhook is delivered: %w", err)
-    }
-    return exists, nil
+	query := `SELECT EXISTS(SELECT 1 FROM webhook_deliveries WHERE job_id = $1 AND status = 'delivered')`
+
+	var exists bool
+	err := db.QueryRow(query, jobID).Scan(&exists)
+	if err != nil {
+		return false, fmt.Errorf("error while checking webhook is delivered: %w", err)
+	}
+	return exists, nil
 }
 
 func ReleaseWebhookDelivery(db *sql.DB, jobID string) error {

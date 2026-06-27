@@ -14,20 +14,20 @@ import (
 	"time"
 )
 
-type EmailWorker struct{
+type EmailWorker struct {
 	apiKey string
 }
 
 type EmailWorkerPayload struct {
-	To string `json:"to"`
+	To      string `json:"to"`
 	Subject string `json:"subject"`
-	Body string `json:"body"`
+	Body    string `json:"body"`
 }
 
 const APIURL string = "https://api.sendgrid.com/v3/mail/send"
 
 type sgEmail struct {
-    Email string `json:"email"`
+	Email string `json:"email"`
 }
 
 type sgPersonalization struct {
@@ -35,18 +35,18 @@ type sgPersonalization struct {
 }
 
 type sgContent struct {
-    Type  string `json:"type"`
-    Value string `json:"value"`
+	Type  string `json:"type"`
+	Value string `json:"value"`
 }
 
 type sgRequestBody struct {
-    Personalizations []sgPersonalization `json:"personalizations"`
-    From             sgEmail             `json:"from"`
-    Subject          string              `json:"subject"`
-    Content          []sgContent         `json:"content"`
+	Personalizations []sgPersonalization `json:"personalizations"`
+	From             sgEmail             `json:"from"`
+	Subject          string              `json:"subject"`
+	Content          []sgContent         `json:"content"`
 }
 
-func NewEmailWorker(apiKey string) *EmailWorker{
+func NewEmailWorker(apiKey string) *EmailWorker {
 	return &EmailWorker{
 		apiKey: apiKey,
 	}
@@ -57,8 +57,9 @@ func (_ EmailWorker) Timeout() time.Duration {
 }
 
 func (worker EmailWorker) Process(ctx context.Context, job *jobs.Job) error {
+	//we are not implementing idempotency here as it is not needed
 	var payload EmailWorkerPayload
-	if err := json.Unmarshal(job.Payload, &payload); err != nil{
+	if err := json.Unmarshal(job.Payload, &payload); err != nil {
 		return fmt.Errorf("error while reading payload of email worker: %w", err)
 	}
 
@@ -93,11 +94,11 @@ func (worker EmailWorker) Process(ctx context.Context, job *jobs.Job) error {
 				},
 			},
 		},
-		From: sgEmail{Email: "shukanpanchal411@gmail.com"},
+		From:    sgEmail{Email: "shukanpanchal411@gmail.com"},
 		Subject: payload.Subject,
 		Content: []sgContent{
 			{
-				Type: "text/plain",
+				Type:  "text/plain",
 				Value: payload.Body,
 			},
 		},
@@ -114,7 +115,7 @@ func (worker EmailWorker) Process(ctx context.Context, job *jobs.Job) error {
 	}
 
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", "Bearer " + worker.apiKey)
+	req.Header.Set("Authorization", "Bearer "+worker.apiKey)
 
 	//using the same httpclient which was declared in webhook worker
 	resp, err := httpClient.Do(req)

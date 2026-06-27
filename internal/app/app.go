@@ -25,7 +25,7 @@ type App struct {
 	gracePeriod       int
 	reapInterval      int
 	visibilityTimeout int
-	sendGridAPIKey string
+	sendGridAPIKey    string
 }
 
 func NewApp(cfg *config.Config) (*App, error) {
@@ -50,7 +50,7 @@ func NewApp(cfg *config.Config) (*App, error) {
 		gracePeriod:       cfg.GracePeriod,
 		visibilityTimeout: cfg.VisibilityTimeout,
 		reapInterval:      cfg.ReapInterval,
-		sendGridAPIKey: cfg.SendGridAPIKey,
+		sendGridAPIKey:    cfg.SendGridAPIKey,
 	}, nil
 
 }
@@ -90,9 +90,12 @@ func (app *App) getWorkerForType(jobType string) (worker.Worker, error) {
 
 	case "webhook":
 		appWorker = worker.NewWebHookWorker(app.dbClient)
-	
+
 	case "email":
 		appWorker = worker.NewEmailWorker(app.sendGridAPIKey)
+	
+	case "db_cleanup":
+		appWorker = worker.DBCleanerWorker{}
 
 	default:
 		return nil, fmt.Errorf("invalid job type: %s", jobType)
