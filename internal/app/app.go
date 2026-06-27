@@ -55,21 +55,21 @@ func NewApp(cfg *config.Config) (*App, error) {
 
 }
 
-func (app *App) GetJobByID(id string) (*jobs.Job, error) {
-	return store.GetJobByID(app.dbClient, id)
+func (app *App) GetJobByID(ctx context.Context, id string) (*jobs.Job, error) {
+	return store.GetJobByID(ctx, app.dbClient, id)
 }
 
-func (app *App) CreatePersistAndEnqueueJob(jobType string, payload json.RawMessage) (string, error) {
+func (app *App) CreatePersistAndEnqueueJob(ctx context.Context, jobType string, payload json.RawMessage) (string, error) {
 	// KNOWN GAP: if the process crashes between the Postgres commit and this enqueue call,
 	// the job stays "pending" in Postgres but never reaches Redis, and nothing currently
 	// recovers it. Proper fix would be a
 	// transactional outbox pattern if this ever becomes a real problem.
 	job := jobs.New(jobType, payload)
-	if err := store.InsertJob(app.dbClient, job); err != nil {
+	if err := store.InsertJob(ctx, app.dbClient, job); err != nil {
 		return "", fmt.Errorf("error inserting job into database: %w", err)
 	}
 	if errRedis := queue.Enqueue(app.redisClient, job.ID); errRedis != nil {
-		if err := store.MarkRetryingOrFailedWithError(app.dbClient, job, jobs.StatusFailed, errRedis.Error()); err != nil {
+		if err := store.MarkRetryingOrFailedWithError(ctx, app.dbClient, job, jobs.StatusFailed, errRedis.Error()); err != nil {
 			var errs []error
 			errs = append(append(errs, err), errRedis)
 			return "", errors.Join(errs...)
@@ -105,7 +105,7 @@ func (app *App) getWorkerForType(jobType string) (worker.Worker, error) {
 	return appWorker, nil
 }
 
-func (app *App) ScheduleRetry(job *jobs.Job, cause error) {
+func (app *App) ScheduleRetry(ctx context.Context, job *jobs.Job, cause error) {
 
 	//calculating delay
 	base := 2 * time.Second
@@ -120,7 +120,7 @@ func (app *App) ScheduleRetry(job *jobs.Job, cause error) {
 
 	//now we will mark this as retrying
 	//we did not mark it before because reaper can get retrying status but it might have the old timestamp in processing set
-	if err := store.MarkRetryingOrFailedWithError(app.dbClient, job, jobs.StatusRetrying, cause.Error()); err != nil {
+	if err := store.MarkRetryingOrFailedWithError(ctx, app.dbClient, job, jobs.StatusRetrying, cause.Error()); err != nil {
 		slog.Error("error while updating the job status to retrying", "error", err, "jobID", job.ID)
 	}
 
@@ -147,14 +147,14 @@ func (app *App) ProcessNextJob(ctx context.Context) (string, error) {
 
 	slog.Info("job dequeued", "job_id", jobID)
 
-	job, err := app.GetJobByID(jobID)
+	job, err := app.GetJobByID(ctx, jobID)
 	if err != nil {
 		return "", fmt.Errorf("error while fetching job from database: %w", err)
 	}
 
 	if job.Attempts >= job.MaxAttempts {
 		slog.Warn("job exceeded max attempts", "job_id", jobID, "attempts", job.Attempts)
-		if err := store.MarkRetryingOrFailedWithError(app.dbClient, job, jobs.StatusFailed, "max attempts exceeded"); err != nil {
+		if err := store.MarkRetryingOrFailedWithError(ctx, app.dbClient, job, jobs.StatusFailed, "max attempts exceeded"); err != nil {
 			return "", fmt.Errorf("error while updating status to failure for max attempts: %w", err)
 		}
 		// remove it from processing set when failure
@@ -162,7 +162,7 @@ func (app *App) ProcessNextJob(ctx context.Context) (string, error) {
 		return jobID, nil
 	}
 
-	if err := store.MarkProcessingAndIncrementAttempts(app.dbClient, jobID); err != nil {
+	if err := store.MarkProcessingAndIncrementAttempts(ctx, app.dbClient, jobID); err != nil {
 		return "", fmt.Errorf("error while updating status of the job to processing: %w", err)
 	}
 
@@ -172,7 +172,7 @@ func (app *App) ProcessNextJob(ctx context.Context) (string, error) {
 	//getting the jobworker
 	appWorker, err := app.getWorkerForType(job.Type)
 	if err != nil {
-		if err := store.MarkRetryingOrFailedWithError(app.dbClient, job, jobs.StatusFailed, err.Error()); err != nil {
+		if err := store.MarkRetryingOrFailedWithError(ctx, app.dbClient, job, jobs.StatusFailed, err.Error()); err != nil {
 			return "", fmt.Errorf("error while updating the job status to retrying: %w", err)
 		}
 		// remove it from processing set when failure
@@ -187,11 +187,11 @@ func (app *App) ProcessNextJob(ctx context.Context) (string, error) {
 	err = appWorker.Process(jobCtx, job)
 	if err != nil {
 		slog.Error("error while processing job", "job_id", jobID, "attempt", job.Attempts, "error", err.Error())
-		go app.ScheduleRetry(job, err)
+		go app.ScheduleRetry(ctx, job, err)
 		return jobID, nil
 	}
 
-	if err := store.UpdateJobStatus(app.dbClient, jobID, jobs.StatusCompleted); err != nil {
+	if err := store.UpdateJobStatus(ctx, app.dbClient, jobID, jobs.StatusCompleted); err != nil {
 		return "", fmt.Errorf("error while updating the status of the job to completed: %w", err)
 	}
 
@@ -202,7 +202,7 @@ func (app *App) ProcessNextJob(ctx context.Context) (string, error) {
 	return jobID, nil
 }
 
-func (app *App) ReplayDeadLetterJob(deadLetterJobID string) (string, error) {
+func (app *App) ReplayDeadLetterJob(ctx context.Context, deadLetterJobID string) (string, error) {
 
 	// KNOWN GAP: if the process crashes between the Postgres commit and this enqueue call,
 	// the job stays "pending" in Postgres but never reaches Redis, and nothing currently
@@ -212,7 +212,7 @@ func (app *App) ReplayDeadLetterJob(deadLetterJobID string) (string, error) {
 	slog.Info("replaying job", "ID", deadLetterJobID)
 
 	//getting the dead letter job from db
-	deadLetterJob, err := store.GetDeadLetterJobByID(app.dbClient, deadLetterJobID)
+	deadLetterJob, err := store.GetDeadLetterJobByID(ctx, app.dbClient, deadLetterJobID)
 	if err != nil {
 		return "", err
 	}
@@ -221,7 +221,7 @@ func (app *App) ReplayDeadLetterJob(deadLetterJobID string) (string, error) {
 	job := jobs.New(deadLetterJob.Type, deadLetterJob.Payload)
 
 	//replay the job by creating a job in jobs table and updating the replay job id column in dead letter queue
-	if err := store.ReplayDeadLetterJob(app.dbClient, deadLetterJob, job); err != nil {
+	if err := store.ReplayDeadLetterJob(ctx, app.dbClient, deadLetterJob, job); err != nil {
 		return "", err
 	}
 

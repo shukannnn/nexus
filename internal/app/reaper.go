@@ -9,7 +9,7 @@ import (
 	"time"
 )
 
-func (app *App) Reap() {
+func (app *App) Reap(ctx context.Context) {
 	//getting stale jobs
 	result, err := queue.GetStaleJobs(app.redisClient)
 	if err != nil {
@@ -30,7 +30,7 @@ func (app *App) Reap() {
 
 	}
 
-	jobRows, err := store.GetJobByIDs(app.dbClient, jobIDs)
+	jobRows, err := store.GetJobByIDs(ctx, app.dbClient, jobIDs)
 	if err != nil {
 		slog.Error("error while getting job rows in reap", "error", err)
 		return
@@ -75,7 +75,7 @@ func (app *App) StartReaper(ctx context.Context) {
 		case <-ticker.C:
 			// call sweep function
 			slog.Info("starting reap")
-			app.Reap()
+			app.Reap(ctx)
 			slog.Info("reap completed")
 		case <-ctx.Done():
 			//this means the server is shutdown

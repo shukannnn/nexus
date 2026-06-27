@@ -51,16 +51,16 @@ func (worker WebHookWorker) Process(ctx context.Context, job *jobs.Job) error {
 	}
 
 	//check if the request has already been made?
-	claimed, err := store.ClaimWebhookDelivery(worker.db, job.ID)
+	claimed, err := store.ClaimWebhookDelivery(ctx, worker.db, job.ID)
 	if err != nil {
 		//delete the webhook delivery from table
-		store.DeleteWebhookDelivery(worker.db, job.ID)
+		store.DeleteWebhookDelivery(ctx, worker.db, job.ID)
 		return err
 	}
 
 	if !claimed {
 		// row exists — but is it actually delivered?
-		delivered, err := store.IsWebhookDelivered(worker.db, job.ID)
+		delivered, err := store.IsWebhookDelivered(ctx, worker.db, job.ID)
 		if err != nil {
 			return err
 		}
@@ -80,7 +80,7 @@ func (worker WebHookWorker) Process(ctx context.Context, job *jobs.Job) error {
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, payload.URL, bytes.NewReader(payload.Payload))
 	if err != nil {
 		//delete the webhook delivery from table
-		store.DeleteWebhookDelivery(worker.db, job.ID)
+		store.DeleteWebhookDelivery(ctx, worker.db, job.ID)
 		return fmt.Errorf("error while making post request for webhookworker : %w", err)
 	}
 
@@ -91,7 +91,7 @@ func (worker WebHookWorker) Process(ctx context.Context, job *jobs.Job) error {
 	resp, err := httpClient.Do(req)
 	if err != nil {
 		//delete the webhook delivery from table
-		store.DeleteWebhookDelivery(worker.db, job.ID)
+		store.DeleteWebhookDelivery(ctx, worker.db, job.ID)
 		return fmt.Errorf("webhook delivery failed with error: %w", err)
 	}
 	defer func() {
@@ -101,13 +101,13 @@ func (worker WebHookWorker) Process(ctx context.Context, job *jobs.Job) error {
 	}()
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		//delete the webhook delivery from table
-		store.DeleteWebhookDelivery(worker.db, job.ID)
+		store.DeleteWebhookDelivery(ctx, worker.db, job.ID)
 		return fmt.Errorf("webhook delivery failed with status: %d", resp.StatusCode)
 	}
 	slog.Info("webhook delivered", "url", payload.URL, "status", resp.StatusCode)
 
 	//update the status in db
-	if err := store.ReleaseWebhookDelivery(worker.db, job.ID); err != nil {
+	if err := store.ReleaseWebhookDelivery(ctx, worker.db, job.ID); err != nil {
 		return err
 	}
 

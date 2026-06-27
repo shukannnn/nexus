@@ -45,7 +45,7 @@ func (h *Handler) createJob(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	jobID, err := h.app.CreatePersistAndEnqueueJob(req.Type, req.Payload)
+	jobID, err := h.app.CreatePersistAndEnqueueJob(r.Context(), req.Type, req.Payload)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -68,7 +68,7 @@ func (h *Handler) createJob(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) getJob(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 
-	job, err := h.app.GetJobByID(id)
+	job, err := h.app.GetJobByID(r.Context(), id)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -84,7 +84,7 @@ func (h *Handler) getJob(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) replay(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 
-	jobID, err := h.app.ReplayDeadLetterJob(id)
+	jobID, err := h.app.ReplayDeadLetterJob(r.Context(), id)
 
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
