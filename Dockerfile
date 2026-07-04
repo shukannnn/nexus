@@ -1,4 +1,4 @@
-FROM ubuntu:22.04
+FROM ubuntu:24.04
 
 # non interactive due to docker
 ENV DEBIAN_FRONTEND=noninteractive
@@ -11,14 +11,14 @@ RUN apt-get update && apt-get install -y \
     libcap-dev \
     libseccomp-dev && \
     curl https://www.ucw.cz/isolate/debian/signing-key.asc > /etc/apt/keyrings/isolate.asc && \
-    echo "Types: deb\nURIs: http://www.ucw.cz/isolate/debian/\nSuites: trixie-isolate\nComponents: main\nArchitectures: amd64\nSigned-By: /etc/apt/keyrings/isolate.asc" > /etc/apt/sources.list.d/isolate.sources && \
+    echo "Types: deb\nURIs: http://www.ucw.cz/isolate/debian/\nSuites: trixie-isolate\nComponents: main\nArchitectures: arm64\nSigned-By: /etc/apt/keyrings/isolate.asc" > /etc/apt/sources.list.d/isolate.sources && \
     apt-get update && \
     apt-get install -y isolate
 
 # installing go in the image    
-RUN wget https://go.dev/dl/go1.24.3.linux-amd64.tar.gz && \
-    tar -C /usr/local -xzf go1.24.3.linux-amd64.tar.gz && \
-    rm go1.24.3.linux-amd64.tar.gz
+RUN wget https://go.dev/dl/go1.24.3.linux-arm64.tar.gz && \
+    tar -C /usr/local -xzf go1.24.3.linux-arm64.tar.gz && \
+    rm go1.24.3.linux-arm64.tar.gz
 
 
 # setting the path

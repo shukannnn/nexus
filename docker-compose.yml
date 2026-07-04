@@ -15,14 +15,21 @@ services:
       POSTGRES_PASSWORD: nexus
     volumes:
       - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U nexus -d nexus"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
     
   nexus:
       build: .
       ports:
         - "8080:8080"
       depends_on:
-        - redis
-        - postgres
+        postgres:
+          condition: service_healthy
+        redis:
+          condition: service_started
       privileged: true
       env_file:
         - .env
