@@ -15,8 +15,8 @@ type DBCleanerWorker struct {
 
 type DBCleanerWorkerPayload struct {
 	Table            string `json:"tables"`
-	OlderThanSeconds int      `json:"older_than_seconds"`
-	ConnectionString string   `json:"connection_string"`
+	OlderThanSeconds int    `json:"older_than_seconds"`
+	ConnectionString string `json:"connection_string"`
 }
 
 func (_ DBCleanerWorker) Timeout() time.Duration {
@@ -66,7 +66,7 @@ func (worker DBCleanerWorker) Process(ctx context.Context, job *jobs.Job) error 
 	defer db.Close()
 
 	query := fmt.Sprintf("DELETE FROM %s WHERE created_at < NOW() - INTERVAL '%d seconds'", payload.Table, payload.OlderThanSeconds)
-	
+
 	result, err := db.ExecContext(ctx, query)
 	if err != nil {
 		return fmt.Errorf("error while executing query in db cleaner worker, %w", err)

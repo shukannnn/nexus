@@ -26,6 +26,7 @@ type App struct {
 	reapInterval      int
 	visibilityTimeout int
 	sendGridAPIKey    string
+	boxPool chan int
 }
 
 func NewApp(cfg *config.Config) (*App, error) {
@@ -44,6 +45,12 @@ func NewApp(cfg *config.Config) (*App, error) {
 		return nil, fmt.Errorf("error connecting to redis: %w", err)
 	}
 
+	// creating a box pool which is required by the code execution worker
+	boxPool := make(chan int, cfg.PoolSize)
+	for i := 0; i < cfg.PoolSize; i++ {
+		boxPool <- i
+	}
+
 	return &App{
 		redisClient:       redisClient,
 		dbClient:          dbClient,
@@ -51,6 +58,7 @@ func NewApp(cfg *config.Config) (*App, error) {
 		visibilityTimeout: cfg.VisibilityTimeout,
 		reapInterval:      cfg.ReapInterval,
 		sendGridAPIKey:    cfg.SendGridAPIKey,
+		boxPool: boxPool,
 	}, nil
 
 }
@@ -93,9 +101,12 @@ func (app *App) getWorkerForType(jobType string) (worker.Worker, error) {
 
 	case "email":
 		appWorker = worker.NewEmailWorker(app.sendGridAPIKey)
-	
+
 	case "db_cleanup":
 		appWorker = worker.DBCleanerWorker{}
+
+	case "code_execution":
+		appWorker = worker.NewCodeExecutionWorker(app.boxPool)
 
 	default:
 		return nil, fmt.Errorf("invalid job type: %s", jobType)
