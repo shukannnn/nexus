@@ -143,10 +143,33 @@ func (worker CodeExecutionWorker) Process(ctx context.Context, job *jobs.Job) er
 
 	if payload.Language == "python3" {
 		solutionFileName = solutionFileName + "solution.py"
-	} 
+	} else if payload.Language == "cpp" {
+		solutionFileName = solutionFileName + "solution.cpp"
+	}
 
 	if err := os.WriteFile(solutionFileName, []byte(payload.SourceCode), 0644); err != nil {
 		return fmt.Errorf("error while writing the file to isolate for code execution worker: %w", err)
+	}
+
+	// if the langauge is cpp, we need to compile it first
+	if payload.Language == "cpp" {
+		binaryPath := fmt.Sprintf("/var/lib/isolate/%d/box/solution", boxID)
+		compileCommand := exec.CommandContext(ctx, "g++", solutionFileName, "-o", binaryPath)
+		compileOutput, err := compileCommand.CombinedOutput()
+		 if err != nil {
+			// CE — store in DB and return nil
+			if dbErr := store.InsertCodeExecutionResult(ctx, worker.db, job.ID, map[string]string{
+				"status":    "CE",
+				"time_ms":   "0",
+				"memory_kb": "0",
+				"exit_code": "0",
+				"message":   "",
+			}, "", string(compileOutput)); dbErr != nil {
+				return fmt.Errorf("error while inserting CE result for code execution worker: %w", dbErr)
+			}
+			slog.Info("compilation error", "jobID", job.ID, "output", string(compileOutput))
+			return nil
+		}
 	}
 
 	// copying the stdin into isolate, if stdin is present
@@ -177,6 +200,8 @@ func (worker CodeExecutionWorker) Process(ctx context.Context, job *jobs.Job) er
 
 	if payload.Language == "python3" {
 		args = append(args, "/usr/bin/python3", "solution.py")
+	} else if payload.Language == "cpp" {
+		args = append(args, "./solution")
 	}
 
 	executionCmd := exec.CommandContext(ctx, "isolate", args...)

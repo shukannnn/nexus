@@ -10,6 +10,7 @@ RUN apt-get update && apt-get install -y \
     pkg-config \
     libcap-dev \
     python3 \
+    g++ \
     libseccomp-dev && \
     curl https://www.ucw.cz/isolate/debian/signing-key.asc > /etc/apt/keyrings/isolate.asc && \
     echo "Types: deb\nURIs: http://www.ucw.cz/isolate/debian/\nSuites: trixie-isolate\nComponents: main\nArchitectures: arm64\nSigned-By: /etc/apt/keyrings/isolate.asc" > /etc/apt/sources.list.d/isolate.sources && \
