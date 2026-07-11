@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"nexus/internal/jobs"
+	"strconv"
 
 	"github.com/lib/pq"
 )
@@ -253,6 +254,31 @@ func DeleteWebhookDelivery(ctx context.Context, db *sql.DB, jobID string) error 
 	query := `DELETE from webhook_deliveries where job_id = $1`
 	if _, err := db.ExecContext(ctx, query, jobID); err != nil {
 		return fmt.Errorf("error while deleting webhook : %w", err)
+	}
+	return nil
+}
+
+func InsertCodeExecutionResult(ctx context.Context, db *sql.DB, jobID string, metaContent map[string]string, stdout string, stderr string) error {
+	query := `INSERT INTO code_execution_results 
+    (job_id, status, stdout, stderr, time_ms, memory_kb, exit_code, message)
+    VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`
+
+	timeMs, _ := strconv.Atoi(metaContent["time_ms"])
+	memoryKb, _ := strconv.Atoi(metaContent["memory_kb"])
+	exitCode, _ := strconv.Atoi(metaContent["exit_code"])
+
+	_, err := db.ExecContext(ctx, query,
+		jobID,
+		metaContent["status"],
+		stdout,
+		stderr,
+		timeMs,
+		memoryKb,
+		exitCode,
+		metaContent["message"],
+	)
+	if err != nil {
+		return fmt.Errorf("error while inserting code execution result: %w", err)
 	}
 	return nil
 }

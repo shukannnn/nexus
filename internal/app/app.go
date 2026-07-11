@@ -106,7 +106,7 @@ func (app *App) getWorkerForType(jobType string) (worker.Worker, error) {
 		appWorker = worker.DBCleanerWorker{}
 
 	case "code_execution":
-		appWorker = worker.NewCodeExecutionWorker(app.boxPool)
+		appWorker = worker.NewCodeExecutionWorker(app.boxPool, app.dbClient)
 
 	default:
 		return nil, fmt.Errorf("invalid job type: %s", jobType)

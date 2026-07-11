@@ -2,17 +2,22 @@ package worker
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"log/slog"
 	"nexus/internal/jobs"
+	"nexus/internal/store"
 	"os"
 	"os/exec"
+	"strconv"
+	"strings"
 	"time"
 )
 
 type CodeExecutionWorker struct {
 	boxPool chan int
+	db *sql.DB
 }
 
 type CodeExecutionWorkerPayload struct {
@@ -23,14 +28,66 @@ type CodeExecutionWorkerPayload struct {
 	MemoryLimitKb int    `json:"memory_limit_kb"`
 }
 
-func NewCodeExecutionWorker(boxPool chan int) *CodeExecutionWorker {
+func NewCodeExecutionWorker(boxPool chan int, db *sql.DB) *CodeExecutionWorker {
 	return &CodeExecutionWorker{
 		boxPool: boxPool,
+		db: db,
 	}
 }
 
 func (_ CodeExecutionWorker) Timeout() time.Duration {
 	return 60 * time.Second
+}
+
+func (_ CodeExecutionWorker) parseMetaFile(content []byte) map[string]string {
+	result := map[string]string{
+		"time_ms" : "",
+		"memory_kb" : "",
+		"exit_code" : "",
+		"status" : "",
+		"message" : "",
+	}
+
+	lines := strings.Split(string(content), "\n")
+
+	for _, line := range lines {
+		if line == "" {
+			continue
+		}
+
+		parts := strings.SplitN(line, ":", 2)
+		if len(parts) != 2 {
+			continue
+		}
+
+		key := strings.TrimSpace(parts[0])
+		value := strings.TrimSpace(parts[1])
+
+		switch key {
+			case "time":
+				if t, err := strconv.ParseFloat(value, 64); err == nil {
+					result["time_ms"] = strconv.FormatFloat(t*1000, 'f', -1, 64)
+				}
+			
+			case "max-rss":
+				result["memory_kb"] = value
+			
+			case "exitcode":
+				result["exit_code"] = value
+			
+			case "status":
+				result["status"] = value
+			
+			case "message":
+				result["message"] = value
+		}
+	}
+
+	if result["status"] == "" {
+		result["status"] = "OK"
+	}
+
+	return result
 }
 
 func (worker CodeExecutionWorker) Process(ctx context.Context, job *jobs.Job) error {
@@ -139,7 +196,15 @@ func (worker CodeExecutionWorker) Process(ctx context.Context, job *jobs.Job) er
 		return fmt.Errorf("erorr while reading meta file in code execution worker: %w", err)
 	}
 
-	slog.Info("code execution result", "jobID", job.ID, "stdout", string(stdoutContent), "stderr", string(stderrContent), "meta", string(metaContent))
+	//parsing the meta file
+	metaParsedContent := worker.parseMetaFile(metaContent)
+
+	//inserting the content into db, so can be used later by other services
+	if err := store.InsertCodeExecutionResult(ctx, worker.db, job.ID, metaParsedContent, string(stdoutContent), string(stderrContent)); err != nil {
+		return fmt.Errorf("error while inserting the code execution result in db: %w", err)
+	}
+
+	slog.Info("code execution completed", "jobID", job.ID, "status", metaParsedContent["status"], "time_ms", metaParsedContent["time_ms"], "memory_kb", metaParsedContent["memory_kb"], "stdout", string(stdoutContent), "stderr", string(stderrContent))
 
 	return nil
 }
