@@ -258,6 +258,18 @@ func DeleteWebhookDelivery(ctx context.Context, db *sql.DB, jobID string) error 
 	return nil
 }
 
+func GetCodeExecutionResult(ctx context.Context, db *sql.DB, jobID string) (bool, error) {
+	query := `SELECT EXISTS(SELECT 1 FROM code_execution_results WHERE job_id = $1)`
+
+	var exists bool
+	err := db.QueryRowContext(ctx, query, jobID).Scan(&exists)
+	if err != nil {
+		return false, fmt.Errorf("error while checking if code execution results exists: %w", err)
+	}
+	return exists, nil
+}
+
+
 func InsertCodeExecutionResult(ctx context.Context, db *sql.DB, jobID string, metaContent map[string]string, stdout string, stderr string) error {
 	query := `INSERT INTO code_execution_results 
     (job_id, status, stdout, stderr, time_ms, memory_kb, exit_code, message)

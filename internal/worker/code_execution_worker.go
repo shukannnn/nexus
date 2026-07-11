@@ -108,6 +108,14 @@ func (worker CodeExecutionWorker) Process(ctx context.Context, job *jobs.Job) er
 		return fmt.Errorf("invalid memory limit provided to code execution worker: %d", payload.MemoryLimitKb)
 	}
 
+	// checking if the jobID has already been processed earlier? 
+	if check, err := store.GetCodeExecutionResult(ctx, worker.db, job.ID); err != nil {
+		return err
+	} else if check {
+		slog.Info("code execution already processed, skipping", "jobID", job.ID)
+		return nil
+	}
+
 	// getting a box id from the channel, it works as queue to get.
 	boxID := <-worker.boxPool
 	defer func() {

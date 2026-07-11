@@ -15,6 +15,7 @@ type Config struct {
 	VisibilityTimeout int
 	ReapInterval      int
 	SendGridAPIKey    string
+	Email string
 }
 
 func Load() (*Config, error) {
@@ -59,6 +60,8 @@ func Load() (*Config, error) {
 		return nil, fmt.Errorf("sendgrid api key is required")
 	}
 
+	email := os.Getenv("email")
+
 	c := Config{
 		Port:              port,
 		RedisAddr:         redisAddr,
@@ -68,6 +71,7 @@ func Load() (*Config, error) {
 		VisibilityTimeout: visibilityTimeout,
 		ReapInterval:      reapInterval,
 		SendGridAPIKey:    sendGridAPIKey,
+		Email: email,
 	}
 
 	return &c, nil

@@ -16,6 +16,7 @@ import (
 
 type EmailWorker struct {
 	apiKey string
+	email string
 }
 
 type EmailWorkerPayload struct {
@@ -46,9 +47,10 @@ type sgRequestBody struct {
 	Content          []sgContent         `json:"content"`
 }
 
-func NewEmailWorker(apiKey string) *EmailWorker {
+func NewEmailWorker(apiKey string, email string) *EmailWorker {
 	return &EmailWorker{
 		apiKey: apiKey,
+		email: email,
 	}
 }
 
@@ -94,7 +96,7 @@ func (worker EmailWorker) Process(ctx context.Context, job *jobs.Job) error {
 				},
 			},
 		},
-		From:    sgEmail{Email: "shukanpanchal411@gmail.com"},
+		From:    sgEmail{Email: worker.email},
 		Subject: payload.Subject,
 		Content: []sgContent{
 			{

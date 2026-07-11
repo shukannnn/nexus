@@ -27,6 +27,7 @@ type App struct {
 	visibilityTimeout int
 	sendGridAPIKey    string
 	boxPool chan int
+	email string
 }
 
 func NewApp(cfg *config.Config) (*App, error) {
@@ -59,6 +60,7 @@ func NewApp(cfg *config.Config) (*App, error) {
 		reapInterval:      cfg.ReapInterval,
 		sendGridAPIKey:    cfg.SendGridAPIKey,
 		boxPool: boxPool,
+		email: cfg.Email,
 	}, nil
 
 }
@@ -100,7 +102,7 @@ func (app *App) getWorkerForType(jobType string) (worker.Worker, error) {
 		appWorker = worker.NewWebHookWorker(app.dbClient)
 
 	case "email":
-		appWorker = worker.NewEmailWorker(app.sendGridAPIKey)
+		appWorker = worker.NewEmailWorker(app.sendGridAPIKey, app.email)
 
 	case "db_cleanup":
 		appWorker = worker.DBCleanerWorker{}
