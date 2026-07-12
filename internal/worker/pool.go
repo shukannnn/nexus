@@ -31,7 +31,7 @@ func (pool *Pool) Start(ctx context.Context) {
 						slog.Error("job processed by worker with error", "jobId", jobID, "error", err)
 					}
 					if jobID == "" {
-						time.Sleep(1 * time.Second)
+						time.Sleep(10 * time.Second)
 					}
 				}
 			}
