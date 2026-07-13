@@ -294,3 +294,19 @@ func InsertCodeExecutionResult(ctx context.Context, db *sql.DB, jobID string, me
 	}
 	return nil
 }
+
+func GetCodeExecutionResultByJobID(ctx context.Context, db *sql.DB, jobID string) (*jobs.CodeExecutionResult, error) {
+    query := `SELECT id, job_id, status, stdout, stderr, time_ms, memory_kb, exit_code, message, verdict, created_at 
+              FROM code_execution_results WHERE job_id = $1`
+
+    var record jobs.CodeExecutionResult
+    err := db.QueryRowContext(ctx, query, jobID).Scan(
+        &record.ID, &record.JobID, &record.Status, &record.Stdout,
+        &record.Stderr, &record.TimeMs, &record.MemoryKb, &record.ExitCode,
+        &record.Message, &record.Verdict, &record.CreatedAt,
+    )
+    if err != nil {
+        return nil, fmt.Errorf("error while fetching code execution result: %w", err)
+    }
+    return &record, nil
+}

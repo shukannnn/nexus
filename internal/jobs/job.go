@@ -37,6 +37,20 @@ type DeadLetterJob struct {
 	UpdatedAt   string          `json:"updated_at"`
 }
 
+type CodeExecutionResult struct {
+    ID        string `json:"id"`
+    JobID     string `json:"job_id"`
+    Status    string `json:"status"`
+    Stdout    string `json:"stdout"`
+    Stderr    string `json:"stderr"`
+    TimeMs    int    `json:"time_ms"`
+    MemoryKb  int    `json:"memory_kb"`
+    ExitCode  int    `json:"exit_code"`
+    Message   string `json:"message"`
+    Verdict   string `json:"verdict"`
+    CreatedAt string `json:"created_at"`
+}
+
 const (
 	StatusPending    = "pending"
 	StatusProcessing = "processing"

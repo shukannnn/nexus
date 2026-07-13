@@ -30,6 +30,7 @@ func (h *Handler) Routes() http.Handler {
 	r.Post("/jobs", h.createJob)
 	r.Post("/dead-letter/{id}/replay", h.replay)
 	r.Post("/judge", h.judge)
+	r.Get("/judge/{id}", h.getJudge)
 
 	return r
 }
@@ -152,6 +153,22 @@ func (h *Handler) judge(w http.ResponseWriter, r *http.Request) {
 
 	if err := json.NewEncoder(w).Encode(&res); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+}
+
+func (h *Handler) getJudge(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id")
+
+	result, err := h.app.GetCodeExecutionResultByJobID(r.Context(), id)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	if resErr := json.NewEncoder(w).Encode(&result); resErr != nil {
+		http.Error(w, resErr.Error(), http.StatusInternalServerError)
 		return
 	}
 }

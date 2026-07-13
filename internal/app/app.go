@@ -69,6 +69,10 @@ func (app *App) GetJobByID(ctx context.Context, id string) (*jobs.Job, error) {
 	return store.GetJobByID(ctx, app.dbClient, id)
 }
 
+func (app *App) GetCodeExecutionResultByJobID(ctx context.Context, id string) (*jobs.CodeExecutionResult, error) {
+	return store.GetCodeExecutionResultByJobID(ctx, app.dbClient, id)
+}
+
 func (app *App) CreatePersistAndEnqueueJob(ctx context.Context, jobType string, payload json.RawMessage) (string, error) {
 	// KNOWN GAP: if the process crashes between the Postgres commit and this enqueue call,
 	// the job stays "pending" in Postgres but never reaches Redis, and nothing currently
