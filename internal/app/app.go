@@ -69,7 +69,7 @@ func (app *App) GetJobByID(ctx context.Context, id string) (*jobs.Job, error) {
 	return store.GetJobByID(ctx, app.dbClient, id)
 }
 
-func (app *App) GetCodeExecutionResultByJobID(ctx context.Context, id string) (*jobs.CodeExecutionResult, error) {
+func (app *App) GetCodeExecutionResultByJobID(ctx context.Context, id string) (*jobs.CodeExecutionResponse, error) {
 	return store.GetCodeExecutionResultByJobID(ctx, app.dbClient, id)
 }
 

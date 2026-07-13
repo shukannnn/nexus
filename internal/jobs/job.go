@@ -2,6 +2,7 @@ package jobs
 
 import (
 	"encoding/json"
+	"time"
 
 	"github.com/google/uuid"
 )
@@ -48,7 +49,12 @@ type CodeExecutionResult struct {
     ExitCode  int    `json:"exit_code"`
     Message   string `json:"message"`
     Verdict   string `json:"verdict"`
-    CreatedAt string `json:"created_at"`
+    CreatedAt time.Time `json:"created_at"`
+}
+
+type CodeExecutionResponse struct {
+	JobStatus string                `json:"job_status"`
+	Result    *CodeExecutionResult  `json:"result"`
 }
 
 const (

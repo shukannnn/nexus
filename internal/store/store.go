@@ -295,18 +295,52 @@ func InsertCodeExecutionResult(ctx context.Context, db *sql.DB, jobID string, me
 	return nil
 }
 
-func GetCodeExecutionResultByJobID(ctx context.Context, db *sql.DB, jobID string) (*jobs.CodeExecutionResult, error) {
-    query := `SELECT id, job_id, status, stdout, stderr, time_ms, memory_kb, exit_code, message, verdict, created_at 
-              FROM code_execution_results WHERE job_id = $1`
+func GetCodeExecutionResultByJobID(ctx context.Context, db *sql.DB, jobID string) (*jobs.CodeExecutionResponse, error) {
+    query := `SELECT j.status, ce.id, ce.job_id, ce.status, ce.stdout, ce.stderr, ce.time_ms, ce.memory_kb, ce.exit_code, ce.message, ce.verdict, ce.created_at 
+	FROM jobs j LEFT JOIN code_execution_results ce ON ce.job_id = j.id WHERE j.id = $1`
 
-    var record jobs.CodeExecutionResult
-    err := db.QueryRowContext(ctx, query, jobID).Scan(
-        &record.ID, &record.JobID, &record.Status, &record.Stdout,
-        &record.Stderr, &record.TimeMs, &record.MemoryKb, &record.ExitCode,
-        &record.Message, &record.Verdict, &record.CreatedAt,
-    )
+    var record jobs.CodeExecutionResponse
+	var (
+		id         sql.NullString
+		resultJobID sql.NullString
+		status     sql.NullString
+		stdout     sql.NullString
+		stderr     sql.NullString
+		timeMs     sql.NullInt32
+		memoryKb   sql.NullInt32
+		exitCode   sql.NullInt32
+		message    sql.NullString
+		verdict    sql.NullString
+		createdAt  sql.NullTime
+	)
+
+	err := db.QueryRowContext(ctx, query, jobID).Scan(&record.JobStatus, &id, &resultJobID, &status, &stdout,
+		&stderr, &timeMs, &memoryKb, &exitCode, &message, &verdict, &createdAt,)
+
+		
     if err != nil {
         return nil, fmt.Errorf("error while fetching code execution result: %w", err)
     }
+
+	// No execution result yet.
+	if !id.Valid {
+		record.Result = nil
+		return &record, nil
+	}
+
+	record.Result = &jobs.CodeExecutionResult{
+		ID:         id.String,
+		JobID:      resultJobID.String,
+		Status:     status.String,
+		Stdout:     stdout.String,
+		Stderr:     stderr.String,
+		TimeMs:     int(timeMs.Int32),
+		MemoryKb:   int(memoryKb.Int32),
+		ExitCode:   int(exitCode.Int32),
+		Message:    message.String,
+		Verdict:    verdict.String,
+		CreatedAt:  createdAt.Time,
+	}
+
     return &record, nil
 }
