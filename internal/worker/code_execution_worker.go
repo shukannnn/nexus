@@ -170,7 +170,7 @@ func (worker CodeExecutionWorker) Process(ctx context.Context, job *jobs.Job) er
 				"memory_kb": "0",
 				"exit_code": "0",
 				"message":   "",
-			}, "", string(compileOutput), ""); dbErr != nil {
+			}, "", string(compileOutput), "CE"); dbErr != nil {
 				return fmt.Errorf("error while inserting CE result for code execution worker: %w", dbErr)
 			}
 			slog.Info("compilation error", "jobID", job.ID, "output", string(compileOutput))
@@ -240,10 +240,23 @@ func (worker CodeExecutionWorker) Process(ctx context.Context, job *jobs.Job) er
 
 	// checking the verdict
 	verdict := ""
-	if payload.Compare {
-		verdict = "WA"
-		if string(stdoutContent) == payload.ExpectedOutput {
-			verdict = "AC"
+	memoryKb, _ := strconv.Atoi(metaParsedContent["memory_kb"])
+
+	switch metaParsedContent["status"] {
+	case "TO":
+		verdict = "TLE"
+	case "RE":
+		if memoryKb >= payload.MemoryLimitKb {
+			verdict = "MLE"
+		} else {
+			verdict = "RE"
+		}
+	case "OK":
+		if payload.Compare {
+			verdict = "WA"
+			if string(stdoutContent) == payload.ExpectedOutput {
+				verdict = "AC"
+			}
 		}
 	}
 
