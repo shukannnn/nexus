@@ -257,6 +257,8 @@ func (worker CodeExecutionWorker) Process(ctx context.Context, job *jobs.Job) er
 			if string(stdoutContent) == payload.ExpectedOutput {
 				verdict = "AC"
 			}
+		} else {
+			verdict = "OK"
 		}
 	}
 
