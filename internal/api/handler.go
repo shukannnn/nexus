@@ -184,10 +184,6 @@ func (h *Handler) getJudge(w http.ResponseWriter, r *http.Request) {
 
 	result, err := h.app.GetCodeExecutionResultByJobID(r.Context(), id)
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			http.Error(w, "result not ready", http.StatusNotFound)
-			return
-		}
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
