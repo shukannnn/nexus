@@ -15,7 +15,7 @@ type Config struct {
 	VisibilityTimeout int
 	ReapInterval      int
 	SendGridAPIKey    string
-	Email string
+	Email             string
 }
 
 func Load() (*Config, error) {
@@ -71,7 +71,7 @@ func Load() (*Config, error) {
 		VisibilityTimeout: visibilityTimeout,
 		ReapInterval:      reapInterval,
 		SendGridAPIKey:    sendGridAPIKey,
-		Email: email,
+		Email:             email,
 	}
 
 	return &c, nil

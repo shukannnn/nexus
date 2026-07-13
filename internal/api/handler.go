@@ -29,6 +29,7 @@ func (h *Handler) Routes() http.Handler {
 	r.Get("/jobs/{id}", h.getJob)
 	r.Post("/jobs", h.createJob)
 	r.Post("/dead-letter/{id}/replay", h.replay)
+	r.Post("/judge", h.judge)
 
 	return r
 }
@@ -101,6 +102,56 @@ func (h *Handler) replay(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 	if resErr := json.NewEncoder(w).Encode(&res); resErr != nil {
 		http.Error(w, resErr.Error(), http.StatusInternalServerError)
+		return
+	}
+}
+
+func (h *Handler) judge(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Language       string `json:"language"`
+		SourceCode     string `json:"source_code"`
+		Stdin          string `json:"stdin"`
+		ExpectedOutput string `json:"expected_output"`
+		TimeLimitMs    int    `json:"time_limit_ms"`
+		MemoryLimitKb  int    `json:"memory_limit_kb"`
+		CallbackURL    string `json:"callback_url"`
+		Compare        bool   `json:"compare"`
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "invalid request", http.StatusBadRequest)
+		return
+	}
+
+	if req.ExpectedOutput == "" {
+		http.Error(w, "expected_output is required for judge", http.StatusBadRequest)
+		return
+	}
+	req.Compare = true
+
+	b, err := json.Marshal(req)
+	if err != nil {
+		http.Error(w, "failed to marshal payload", http.StatusInternalServerError)
+		return
+	}
+
+	jobID, err := h.app.CreatePersistAndEnqueueJob(r.Context(), "code_execution", json.RawMessage(b))
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	res := struct {
+		ID string `json:"id"`
+	}{
+		ID: jobID,
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusCreated)
+
+	if err := json.NewEncoder(w).Encode(&res); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 }

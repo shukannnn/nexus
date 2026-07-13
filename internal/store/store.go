@@ -269,11 +269,10 @@ func GetCodeExecutionResult(ctx context.Context, db *sql.DB, jobID string) (bool
 	return exists, nil
 }
 
-
-func InsertCodeExecutionResult(ctx context.Context, db *sql.DB, jobID string, metaContent map[string]string, stdout string, stderr string) error {
+func InsertCodeExecutionResult(ctx context.Context, db *sql.DB, jobID string, metaContent map[string]string, stdout string, stderr string, verdict string) error {
 	query := `INSERT INTO code_execution_results 
-    (job_id, status, stdout, stderr, time_ms, memory_kb, exit_code, message)
-    VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`
+    (job_id, status, stdout, stderr, time_ms, memory_kb, exit_code, message, verdict)
+    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`
 
 	timeMs, _ := strconv.Atoi(metaContent["time_ms"])
 	memoryKb, _ := strconv.Atoi(metaContent["memory_kb"])
@@ -288,6 +287,7 @@ func InsertCodeExecutionResult(ctx context.Context, db *sql.DB, jobID string, me
 		memoryKb,
 		exitCode,
 		metaContent["message"],
+		verdict,
 	)
 	if err != nil {
 		return fmt.Errorf("error while inserting code execution result: %w", err)

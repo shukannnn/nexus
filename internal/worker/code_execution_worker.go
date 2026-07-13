@@ -17,21 +17,23 @@ import (
 
 type CodeExecutionWorker struct {
 	boxPool chan int
-	db *sql.DB
+	db      *sql.DB
 }
 
 type CodeExecutionWorkerPayload struct {
-	Language      string `json:"language"`
-	SourceCode    string `json:"source_code"`
-	Stdin         string `json:"stdin"`
-	TimeLimitMs   int    `json:"time_limit_ms"`
-	MemoryLimitKb int    `json:"memory_limit_kb"`
+	Language       string `json:"language"`
+	SourceCode     string `json:"source_code"`
+	Stdin          string `json:"stdin"`
+	TimeLimitMs    int    `json:"time_limit_ms"`
+	MemoryLimitKb  int    `json:"memory_limit_kb"`
+	Compare        bool   `json:"compare"`
+	ExpectedOutput string `json:"expected_output"`
 }
 
 func NewCodeExecutionWorker(boxPool chan int, db *sql.DB) *CodeExecutionWorker {
 	return &CodeExecutionWorker{
 		boxPool: boxPool,
-		db: db,
+		db:      db,
 	}
 }
 
@@ -41,11 +43,11 @@ func (_ CodeExecutionWorker) Timeout() time.Duration {
 
 func (_ CodeExecutionWorker) parseMetaFile(content []byte) map[string]string {
 	result := map[string]string{
-		"time_ms" : "",
-		"memory_kb" : "",
-		"exit_code" : "",
-		"status" : "",
-		"message" : "",
+		"time_ms":   "",
+		"memory_kb": "",
+		"exit_code": "",
+		"status":    "",
+		"message":   "",
 	}
 
 	lines := strings.Split(string(content), "\n")
@@ -64,22 +66,22 @@ func (_ CodeExecutionWorker) parseMetaFile(content []byte) map[string]string {
 		value := strings.TrimSpace(parts[1])
 
 		switch key {
-			case "time":
-				if t, err := strconv.ParseFloat(value, 64); err == nil {
-					result["time_ms"] = strconv.FormatFloat(t*1000, 'f', -1, 64)
-				}
-			
-			case "max-rss":
-				result["memory_kb"] = value
-			
-			case "exitcode":
-				result["exit_code"] = value
-			
-			case "status":
-				result["status"] = value
-			
-			case "message":
-				result["message"] = value
+		case "time":
+			if t, err := strconv.ParseFloat(value, 64); err == nil {
+				result["time_ms"] = strconv.FormatFloat(t*1000, 'f', -1, 64)
+			}
+
+		case "max-rss":
+			result["memory_kb"] = value
+
+		case "exitcode":
+			result["exit_code"] = value
+
+		case "status":
+			result["status"] = value
+
+		case "message":
+			result["message"] = value
 		}
 	}
 
@@ -108,7 +110,12 @@ func (worker CodeExecutionWorker) Process(ctx context.Context, job *jobs.Job) er
 		return fmt.Errorf("invalid memory limit provided to code execution worker: %d", payload.MemoryLimitKb)
 	}
 
-	// checking if the jobID has already been processed earlier? 
+	// check if the compare is true and no stdout is present
+	if payload.Compare && payload.ExpectedOutput == "" {
+		return fmt.Errorf("invalid expected output provided.")
+	}
+
+	// checking if the jobID has already been processed earlier?
 	if check, err := store.GetCodeExecutionResult(ctx, worker.db, job.ID); err != nil {
 		return err
 	} else if check {
@@ -120,11 +127,11 @@ func (worker CodeExecutionWorker) Process(ctx context.Context, job *jobs.Job) er
 	boxID := <-worker.boxPool
 	defer func() {
 		worker.boxPool <- boxID
-	} ()
+	}()
 
 	// running the isolate command to get a box along with context
 	cmd := exec.CommandContext(ctx, "isolate", "--init", fmt.Sprintf("--box-id=%d", boxID))
-	
+
 	// defer function to clean up the box
 	defer func() {
 		cleanupCmd := exec.Command("isolate", "--cleanup", fmt.Sprintf("--box-id=%d", boxID))
@@ -137,7 +144,6 @@ func (worker CodeExecutionWorker) Process(ctx context.Context, job *jobs.Job) er
 		return fmt.Errorf("error while running the isolate command in code execution worker: %w", err)
 	}
 
-	
 	// copying the source code into isoltate
 	solutionFileName := fmt.Sprintf("/var/lib/isolate/%d/box/", boxID)
 
@@ -156,7 +162,7 @@ func (worker CodeExecutionWorker) Process(ctx context.Context, job *jobs.Job) er
 		binaryPath := fmt.Sprintf("/var/lib/isolate/%d/box/solution", boxID)
 		compileCommand := exec.CommandContext(ctx, "g++", solutionFileName, "-o", binaryPath)
 		compileOutput, err := compileCommand.CombinedOutput()
-		 if err != nil {
+		if err != nil {
 			// CE — store in DB and return nil
 			if dbErr := store.InsertCodeExecutionResult(ctx, worker.db, job.ID, map[string]string{
 				"status":    "CE",
@@ -164,7 +170,7 @@ func (worker CodeExecutionWorker) Process(ctx context.Context, job *jobs.Job) er
 				"memory_kb": "0",
 				"exit_code": "0",
 				"message":   "",
-			}, "", string(compileOutput)); dbErr != nil {
+			}, "", string(compileOutput), ""); dbErr != nil {
 				return fmt.Errorf("error while inserting CE result for code execution worker: %w", dbErr)
 			}
 			slog.Info("compilation error", "jobID", job.ID, "output", string(compileOutput))
@@ -176,12 +182,12 @@ func (worker CodeExecutionWorker) Process(ctx context.Context, job *jobs.Job) er
 	if payload.Stdin != "" {
 		stdinFileName := fmt.Sprintf("/var/lib/isolate/%d/box/stdin.txt", boxID)
 		if err := os.WriteFile(stdinFileName, []byte(payload.Stdin), 0644); err != nil {
-			return fmt.Errorf("error while writing stdin file to isolate for code execution worker: %w", err) 
+			return fmt.Errorf("error while writing stdin file to isolate for code execution worker: %w", err)
 		}
 	}
 
 	// running the isolate box to execute the actual code
-	args := []string {
+	args := []string{
 		"--run",
 		fmt.Sprintf("--box-id=%d", boxID),
 		fmt.Sprintf("--time=%.3f", float64(payload.TimeLimitMs)/1000.0),
@@ -232,12 +238,21 @@ func (worker CodeExecutionWorker) Process(ctx context.Context, job *jobs.Job) er
 	//parsing the meta file
 	metaParsedContent := worker.parseMetaFile(metaContent)
 
+	// checking the verdict
+	verdict := ""
+	if payload.Compare {
+		verdict = "WA"
+		if string(stdoutContent) == payload.ExpectedOutput {
+			verdict = "AC"
+		}
+	}
+
 	//inserting the content into db, so can be used later by other services
-	if err := store.InsertCodeExecutionResult(ctx, worker.db, job.ID, metaParsedContent, string(stdoutContent), string(stderrContent)); err != nil {
+	if err := store.InsertCodeExecutionResult(ctx, worker.db, job.ID, metaParsedContent, string(stdoutContent), string(stderrContent), verdict); err != nil {
 		return fmt.Errorf("error while inserting the code execution result in db: %w", err)
 	}
 
-	slog.Info("code execution completed", "jobID", job.ID, "status", metaParsedContent["status"], "time_ms", metaParsedContent["time_ms"], "memory_kb", metaParsedContent["memory_kb"], "stdout", string(stdoutContent), "stderr", string(stderrContent))
+	slog.Info("code execution completed", "jobID", job.ID, "status", metaParsedContent["status"], "time_ms", metaParsedContent["time_ms"], "memory_kb", metaParsedContent["memory_kb"], "stdout", string(stdoutContent), "stderr", string(stderrContent), "verdict", verdict)
 
 	return nil
 }

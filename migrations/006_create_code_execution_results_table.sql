@@ -8,5 +8,6 @@ CREATE TABLE code_execution_results (
     memory_kb INTEGER,
     exit_code INTEGER,
     message TEXT,
+    verdict VARCHAR,
     created_at TIMESTAMPTZ DEFAULT NOW()
 );

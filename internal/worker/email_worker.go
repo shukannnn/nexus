@@ -16,7 +16,7 @@ import (
 
 type EmailWorker struct {
 	apiKey string
-	email string
+	email  string
 }
 
 type EmailWorkerPayload struct {
@@ -50,7 +50,7 @@ type sgRequestBody struct {
 func NewEmailWorker(apiKey string, email string) *EmailWorker {
 	return &EmailWorker{
 		apiKey: apiKey,
-		email: email,
+		email:  email,
 	}
 }
 

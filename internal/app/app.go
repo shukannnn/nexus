@@ -26,8 +26,8 @@ type App struct {
 	reapInterval      int
 	visibilityTimeout int
 	sendGridAPIKey    string
-	boxPool chan int
-	email string
+	boxPool           chan int
+	email             string
 }
 
 func NewApp(cfg *config.Config) (*App, error) {
@@ -59,8 +59,8 @@ func NewApp(cfg *config.Config) (*App, error) {
 		visibilityTimeout: cfg.VisibilityTimeout,
 		reapInterval:      cfg.ReapInterval,
 		sendGridAPIKey:    cfg.SendGridAPIKey,
-		boxPool: boxPool,
-		email: cfg.Email,
+		boxPool:           boxPool,
+		email:             cfg.Email,
 	}, nil
 
 }
