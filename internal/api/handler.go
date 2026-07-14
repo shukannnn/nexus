@@ -7,6 +7,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
 type Handler struct {
@@ -31,6 +32,7 @@ func (h *Handler) Routes() http.Handler {
 	r.Post("/dead-letter/{id}/replay", h.replay)
 	r.Post("/judge", h.judge)
 	r.Get("/judge/{id}", h.getJudge)
+	r.Handle("/metrics", promhttp.Handler())
 
 	return r
 }
