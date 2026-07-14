@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"nexus/internal/jobs"
+	"nexus/internal/metrics"
 	"strconv"
 
 	"github.com/lib/pq"
@@ -100,6 +101,39 @@ func GetJobByIDs(ctx context.Context, db *sql.DB, ids []string) ([]*jobs.Job, er
 
 }
 
+func GetJobCountByStatus(ctx context.Context, db *sql.DB) (map[string]int, error) {
+	query := `select status, count(*) from jobs group by status`
+
+	rows, err := db.QueryContext(ctx, query)
+	if err != nil {
+		return nil, fmt.Errorf("error while getting job count by status: %w", err)
+	}
+
+	defer rows.Close()
+
+	statusCount := make(map[string]int)
+
+	for rows.Next() {
+		var record struct {
+			Status string
+			Count int
+		}
+
+		err := rows.Scan(&record.Status, &record.Count)
+		if err != nil {
+			return nil, fmt.Errorf("error while getting job count by status: %w", err)
+		}
+
+		statusCount[record.Status] = record.Count
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("error while iterating rows in get job count by status: %w", err)
+	}
+
+	return statusCount, nil
+}
+
 func UpdateJobStatus(ctx context.Context, db *sql.DB, id string, status string) error {
 	query := `UPDATE jobs SET status = $1 where id = $2`
 
@@ -157,7 +191,17 @@ func MarkRetryingOrFailedWithError(ctx context.Context, db *sql.DB, job *jobs.Jo
 		}
 	}
 
-	return tx.Commit()
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("error while commiting data in mark retrying of failed with error: %w", err)
+	}
+
+	if status == jobs.StatusFailed {
+		metrics.RecordJobFailed(job.Type)
+	} else if status == jobs.StatusRetrying {
+		metrics.RecordJobRetried(job.Type)
+	}
+
+	return nil
 }
 
 func GetDeadLetterJobByID(ctx context.Context, db *sql.DB, deadLetterJobID string) (*jobs.DeadLetterJob, error) {
@@ -269,7 +313,7 @@ func GetCodeExecutionResult(ctx context.Context, db *sql.DB, jobID string) (bool
 	return exists, nil
 }
 
-func InsertCodeExecutionResult(ctx context.Context, db *sql.DB, jobID string, metaContent map[string]string, stdout string, stderr string, verdict string) error {
+func InsertCodeExecutionResult(ctx context.Context, db *sql.DB, jobID string, metaContent map[string]string, stdout string, stderr string, verdict string, language string) error {
 	query := `INSERT INTO code_execution_results 
     (job_id, status, stdout, stderr, time_ms, memory_kb, exit_code, message, verdict)
     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`
@@ -292,6 +336,10 @@ func InsertCodeExecutionResult(ctx context.Context, db *sql.DB, jobID string, me
 	if err != nil {
 		return fmt.Errorf("error while inserting code execution result: %w", err)
 	}
+
+	// noting down this in metrics
+	metrics.RecordCodeExecutionVerdict(language, verdict)
+
 	return nil
 }
 

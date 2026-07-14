@@ -70,6 +70,7 @@ func (app *App) Reap(ctx context.Context) {
 func (app *App) StartReaper(ctx context.Context) {
 	//creating a ticker with time interval of reap interval
 	ticker := time.NewTicker((time.Duration(app.reapInterval)) * time.Second)
+	defer ticker.Stop()
 	for {
 		select {
 		case <-ticker.C:
@@ -79,7 +80,6 @@ func (app *App) StartReaper(ctx context.Context) {
 			slog.Info("reap completed")
 		case <-ctx.Done():
 			//this means the server is shutdown
-			ticker.Stop()
 			return
 		}
 	}

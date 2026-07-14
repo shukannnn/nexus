@@ -67,6 +67,10 @@ func main() {
 	reaperCtx, stopReaper := context.WithCancel(context.Background())
 	go application.StartReaper(reaperCtx)
 
+	//starting the poller
+	pollerCtx, stopPoller := context.WithCancel(context.Background())
+	go application.StartQueueDepthPoller(pollerCtx)
+
 	//goroutine to make the server start in background
 	go func() {
 		slog.Info("server starting", "port", cfg.Port)
@@ -87,6 +91,9 @@ func main() {
 
 	//cancelling reaper context so that it stops working
 	stopReaper()
+
+	//cancelling the poller context
+	stopPoller()
 
 	ctxTimeout, cancelTimeout := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancelTimeout()

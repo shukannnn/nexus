@@ -11,6 +11,7 @@ import (
 	"math/rand"
 	"nexus/internal/config"
 	"nexus/internal/jobs"
+	"nexus/internal/metrics"
 	"nexus/internal/queue"
 	"nexus/internal/store"
 	"nexus/internal/worker"
@@ -90,6 +91,8 @@ func (app *App) CreatePersistAndEnqueueJob(ctx context.Context, jobType string, 
 		}
 		return "", fmt.Errorf("error inserting jobid into redis: %w", errRedis)
 	}
+
+	metrics.RecordJobEnqueued(jobType)
 
 	return job.ID, nil
 
@@ -201,6 +204,9 @@ func (app *App) ProcessNextJob(ctx context.Context) (string, error) {
 	jobCtx, cancelJob := context.WithTimeout(ctx, appWorker.Timeout())
 	defer cancelJob()
 
+	// starting the timer
+	start := time.Now()
+
 	err = appWorker.Process(jobCtx, job)
 	if err != nil {
 		slog.Error("error while processing job", "job_id", jobID, "attempt", job.Attempts, "error", err.Error())
@@ -214,6 +220,11 @@ func (app *App) ProcessNextJob(ctx context.Context) (string, error) {
 
 	//remove from processing from success
 	queue.RemoveFromProcessing(app.redisClient, jobID)
+
+	// noting down for metrics
+	metrics.RecordJobCompleted(job.Type)
+	metrics.RecordJobDuration(job.Type, float64(time.Since(start).Seconds()))
+
 	slog.Info("job completed", "job_id", jobID)
 
 	return jobID, nil
@@ -251,6 +262,28 @@ func (app *App) ReplayDeadLetterJob(ctx context.Context, deadLetterJobID string)
 
 	return job.ID, nil
 }
+
+func (app *App) StartQueueDepthPoller(ctx context.Context) {
+	ticker := time.NewTicker((time.Duration(15) * time.Second))
+	defer ticker.Stop()
+	for {
+		select {
+		case <- ticker.C:
+			// call the queue depth function
+			jobStatus, err := store.GetJobCountByStatus(ctx, app.dbClient)
+			if err != nil {
+				slog.Info("error in queue depth poller", "error", err.Error())
+			} else {
+				for key, value := range jobStatus {
+					metrics.RecordJobsDepthCount(key, float64(value))
+				}
+			} 
+		case <- ctx.Done():
+			return
+		}
+	}
+}
+
 
 func (app *App) Close() error {
 	var errs []error

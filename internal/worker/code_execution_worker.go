@@ -170,7 +170,7 @@ func (worker CodeExecutionWorker) Process(ctx context.Context, job *jobs.Job) er
 				"memory_kb": "0",
 				"exit_code": "0",
 				"message":   "",
-			}, "", string(compileOutput), "CE"); dbErr != nil {
+			}, "", string(compileOutput), "CE", payload.Language); dbErr != nil {
 				return fmt.Errorf("error while inserting CE result for code execution worker: %w", dbErr)
 			}
 			slog.Info("compilation error", "jobID", job.ID, "output", string(compileOutput))
@@ -263,7 +263,7 @@ func (worker CodeExecutionWorker) Process(ctx context.Context, job *jobs.Job) er
 	}
 
 	//inserting the content into db, so can be used later by other services
-	if err := store.InsertCodeExecutionResult(ctx, worker.db, job.ID, metaParsedContent, string(stdoutContent), string(stderrContent), verdict); err != nil {
+	if err := store.InsertCodeExecutionResult(ctx, worker.db, job.ID, metaParsedContent, string(stdoutContent), string(stderrContent), verdict, payload.Language); err != nil {
 		return fmt.Errorf("error while inserting the code execution result in db: %w", err)
 	}
 
