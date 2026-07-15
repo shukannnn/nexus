@@ -2,8 +2,11 @@ package api
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"nexus/internal/app"
+	"nexus/internal/metrics"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
@@ -20,12 +23,24 @@ func NewHandler(application *app.App) *Handler {
 	}
 }
 
+// middleware to get the status code and the time
+func TimerMiddleware(next http.Handler) http.Handler {
+    return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+        start := time.Now()
+        ww := middleware.NewWrapResponseWriter(w, r.ProtoMajor)
+        next.ServeHTTP(ww, r)  // note: ww, not w
+        duration := time.Since(start).Seconds()
+		metrics.RecordHttpRequest(r.Method, r.URL.Path, ww.Status(), duration)
+    })
+}
+
 func (h *Handler) Routes() http.Handler {
 	r := chi.NewRouter()
 
 	r.Use(middleware.RequestID)
 	r.Use(middleware.Logger)
 	r.Use(middleware.Recoverer)
+	r.Use(TimerMiddleware)
 
 	r.Get("/jobs/{id}", h.getJob)
 	r.Post("/jobs", h.createJob)

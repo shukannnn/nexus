@@ -1,6 +1,8 @@
 package metrics
 
 import (
+	"strconv"
+
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 )
@@ -40,6 +42,11 @@ var jobsDurationSeconds = promauto.NewHistogramVec(prometheus.HistogramOpts{
 	Help: "histogram to see the job durations",
 }, []string{"job_type"})
 
+var httpRequestDurationSeconds = promauto.NewHistogramVec(prometheus.HistogramOpts{
+	Name: "nexus_http_request_duration_seconds",
+	Help: "histogram tsee the http request duration",
+}, []string{"method", "path", "status_code"})
+
 func RecordJobEnqueued(jobType string) {
 	jobEnqueuedTotal.WithLabelValues(jobType).Inc()
 }
@@ -66,4 +73,9 @@ func RecordJobsDepthCount(status string, value float64) {
 
 func RecordJobDuration(jobType string, seconds float64) {
 	jobsDurationSeconds.WithLabelValues(jobType).Observe(seconds)
+}
+
+func RecordHttpRequest(method string, path string, status_code int, seconds float64) {
+	status_code_string := strconv.Itoa(status_code)
+	httpRequestDurationSeconds.WithLabelValues(method, path, status_code_string).Observe(seconds)
 }
