@@ -66,6 +66,14 @@ func NewApp(cfg *config.Config) (*App, error) {
 
 }
 
+func (app *App) PingDB(ctx context.Context) error {
+	return app.dbClient.PingContext(ctx)
+}
+
+func (app *App) PingRedis(ctx context.Context) error {
+	return app.redisClient.Ping(ctx).Err()
+}
+
 func (app *App) GetJobByID(ctx context.Context, id string) (*jobs.Job, error) {
 	return store.GetJobByID(ctx, app.dbClient, id)
 }

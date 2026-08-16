@@ -29,7 +29,7 @@ func TimerMiddleware(next http.Handler) http.Handler {
         ww := middleware.NewWrapResponseWriter(w, r.ProtoMajor)
         next.ServeHTTP(ww, r)  // note: ww, not w
         duration := time.Since(start).Seconds()
-		metrics.RecordHttpRequest(r.Method, r.URL.Path, ww.Status(), duration)
+		metrics.RecordHttpRequest(r.Method, chi.RouteContext(r.Context()).RoutePattern(), ww.Status(), duration)
     })
 }
 
@@ -41,6 +41,9 @@ func (h *Handler) Routes() http.Handler {
 	r.Use(middleware.Recoverer)
 	r.Use(TimerMiddleware)
 
+	// health endpoint
+	r.Get("/health", h.health)
+
 	r.Get("/jobs/{id}", h.getJob)
 	r.Post("/jobs", h.createJob)
 	r.Post("/dead-letter/{id}/replay", h.replay)
@@ -49,6 +52,41 @@ func (h *Handler) Routes() http.Handler {
 	r.Handle("/metrics", promhttp.Handler())
 
 	return r
+}
+
+func(h * Handler) health(w http.ResponseWriter, r *http.Request) {
+
+	redisStatus := "ok"
+	dbStatus := "ok"
+	if err := h.app.PingDB(r.Context()); err != nil {
+		dbStatus = "no"
+	}
+
+	if err := h.app.PingRedis(r.Context()); err != nil {
+		redisStatus = "no"
+	}
+
+	res := struct {
+		Postgres string `json:"postgres"`
+		Redis string `json:"redis"`
+	}{
+		Postgres: dbStatus,
+		Redis: redisStatus,
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	
+	if redisStatus == "ok" && dbStatus == "ok" {
+		w.WriteHeader(http.StatusOK)
+	} else {
+		w.WriteHeader(http.StatusServiceUnavailable)
+	}
+
+	if resErr := json.NewEncoder(w).Encode(&res); resErr != nil {
+		http.Error(w, resErr.Error(), http.StatusInternalServerError)
+		return
+	}
+
 }
 
 func (h *Handler) createJob(w http.ResponseWriter, r *http.Request) {
